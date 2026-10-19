@@ -1,3 +1,4 @@
+int runRelease033Checks(const char*);
 int runLivePreparation032Checks(const char*);
 int runRelease032Checks(const char*);
 int runCompactModeGui(const char*);
@@ -107,6 +108,7 @@ int main(int argc,char** argv) {
     if(argc==2&&std::string(argv[1])=="--track-check")return runTrackChecks();
     if(argc==3&&std::string(argv[1])=="--compact-mode-snapshot")return runCompactModeGui(argv[2]);
     if(argc==3&&std::string(argv[1])=="--live-prep032-check")return runLivePreparation032Checks(argv[2]);
+    if(argc==3&&std::string(argv[1])=="--release033-check")return runRelease033Checks(argv[2]);
     if(argc==3&&std::string(argv[1])=="--release032-check")return runRelease032Checks(argv[2]);
     if(argc==3&&std::string(argv[1])=="--track-snapshot")return runTrackGui(argv[2]);
     int result = runTrackChecks();if(!result)result = runSliceGroupsChecks();
