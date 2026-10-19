@@ -1,0 +1,13 @@
+#pragma once
+// Explicit drag/export processes bounded overlapping SCNet windows; no reusable stem cache.
+inline bool renderTrackStemMix(juce::AudioBuffer<float>& audio,double sourceRate,const std::array<float,4>& gains,std::function<bool()> cancel={},int regionBegin=0,int regionEnd=-1,bool residual=true,const juce::AudioBuffer<float>* original=nullptr,int outputOffset=0){
+ try{
+  const auto& inputAudio=original?*original:audio;TrackStemModel model;TrackStemWorker::Source source{std::shared_ptr<const juce::AudioBuffer<float>>(&inputAudio,[](auto*){}),sourceRate};
+  regionBegin=juce::jlimit(0,inputAudio.getNumSamples(),regionBegin);regionEnd=regionEnd<0?inputAudio.getNumSamples():juce::jlimit(regionBegin,inputAudio.getNumSamples(),regionEnd);if(regionBegin-outputOffset<0||regionEnd-outputOffset>audio.getNumSamples())return false;const int64_t total=(int64_t)std::ceil(inputAudio.getNumSamples()/sourceRate*44100.);std::vector<float> input;juce::AudioBuffer<float> previous;int64_t previousStart=0;int written=regionBegin;float common=residual?*std::min_element(gains.begin(),gains.end()):0;
+  int64_t first=juce::jmax((int64_t)0,(int64_t)std::floor((regionBegin/sourceRate*44100.-TrackStemModel::overlap)/TrackStemModel::step)*TrackStemModel::step);for(int64_t start=first;start<total;start+=TrackStemModel::step){if(cancel&&cancel())return false;TrackStemWorker::inputBlock(source,start,input);auto output=model.process(input.data());juce::AudioBuffer<float> current(8,TrackStemModel::frames);for(int ch=0;ch<8;++ch)current.copyFrom(ch,0,output+ch*TrackStemModel::frames,TrackStemModel::frames);
+   if(previous.getNumSamples()){for(int n=0;n<TrackStemModel::overlap;++n){float t=(float)n/TrackStemModel::overlap;for(int ch=0;ch<8;++ch)current.setSample(ch,n,previous.getSample(ch,(int)(start-previousStart)+n)*(1-t)+current.getSample(ch,n)*t);}}
+   int64_t finalEnd=juce::jmin(total,start+TrackStemModel::step);if(start+TrackStemModel::frames>=total)finalEnd=total;
+   int end=juce::jmin(regionEnd,(int)std::ceil(finalEnd/44100.*sourceRate));for(int n=written;n<end;++n){double point=n/sourceRate*44100.-start;int a=juce::jlimit(0,TrackStemModel::frames-1,(int)point),b=juce::jmin(TrackStemModel::frames-1,a+1);float t=(float)(point-a);for(int ch=0;ch<audio.getNumChannels();++ch){float sum=0,mix=0;for(int stem=0;stem<4;++stem){auto* samples=current.getReadPointer(stem*2+juce::jmin(ch,1));float value=samples[a]+t*(samples[b]-samples[a]);sum+=value;mix+=value*gains[stem];}audio.setSample(ch,n-outputOffset,mix+(inputAudio.getSample(ch,n)-sum)*common);}}written=juce::jmax(written,end);previous=std::move(current);previousStart=start;if(written>=regionEnd)break;
+  }return true;
+ }catch(const std::exception&){return false;}
+}
