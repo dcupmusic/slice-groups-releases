@@ -8,16 +8,14 @@ A macOS VST3 instrument for slicing loops, playing one-shots and working with tr
 
 Requires an **Apple Silicon Mac running macOS 14 or later**.
 
-1. Download the **AppleSilicon.zip** release asset and unzip it.
+1. Download the **AppleSilicon.dmg** release asset and open it.
 2. Close Ableton or your other audio host.
-3. Copy **Slice Groups.vst3** to `~/Library/Audio/Plug-Ins/VST3/` (create the folder if needed).
-4. Restart the host and rescan VST3 plugins. Add your sample folders inside Slice Groups.
+3. Open **Install Slice Groups.app**, confirm the host is closed, then click **Install**.
+4. Reopen the host and rescan VST3 plugins if needed. Add your sample folders inside Slice Groups.
 
-This build is ad-hoc signed and **not notarized**. If macOS blocks it, allow it in **System Settings → Privacy & Security**. If the host still blocks it, remove quarantine from this downloaded plugin only:
+The installer and plug-in are **Developer ID signed and notarised by Apple**. A normal first-open confirmation may appear; no Terminal quarantine-removal command is required. The installer backs up an existing version and leaves samples, tags and settings untouched. New installs use the user's VST3 folder. Existing user or writable system installations are updated in place; duplicate installations are flagged before copying.
 
-```sh
-xattr -dr com.apple.quarantine "$HOME/Library/Audio/Plug-Ins/VST3/Slice Groups.vst3"
-```
+The **AppleSilicon.zip** asset is an alternative for manual installation. Close the host and replace your existing plug-in in its current folder; for new manual installs use `~/Library/Audio/Plug-Ins/VST3/`. Avoid duplicate copies in both user and system VST3 folders.
 
 The stem models and runtime are bundled. No Python installation is needed. Windows and Intel Mac builds are not included.
 
