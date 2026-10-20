@@ -1,3 +1,5 @@
+int runFeatures370();
+int runSharing370Args(const char*,const char*);
 int runStretch360Checks();
 int runAnchor352Checks();
 int runFolder351Checks();
@@ -132,6 +134,8 @@ int main(int argc,char** argv) {
     if(argc==2&&std::string(argv[1])=="--type335-check")return runType335Checks();
     if(argc==2&&std::string(argv[1])=="--save334-check")return runSave334Checks();
     if(argc==2&&std::string(argv[1])=="--manual-refresh-check")return runManualRefreshChecks();
+    if(argc==2&&std::string(argv[1])=="--features370-check")return runFeatures370();
+    if(argc==4&&std::string(argv[1])=="--sharing370-check")return runSharing370Args(argv[2],argv[3]);
     if(argc==2&&std::string(argv[1])=="--browser332-check")return runBrowser332Checks();
     if(argc==3&&std::string(argv[1])=="--rack-snapshot")return runRackGuiCheck(argv[2]);
     if(argc==5&&std::string(argv[1])=="--save-ab")return runSaveAB(argv[2],argv[3],argv[4]);

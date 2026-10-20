@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.22)
 set(CMAKE_OSX_DEPLOYMENT_TARGET "14.0" CACHE STRING "Minimum macOS version" FORCE)
-project(SliceGroups VERSION 0.36.3)
+project(SliceGroups VERSION 0.37.0)
 set(CMAKE_CXX_STANDARD 17)
 set(JUCE_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/Dependencies/JUCE" CACHE PATH "JUCE checkout")
 add_subdirectory(${JUCE_ROOT} juce)

@@ -68,6 +68,7 @@ public:
   try{if(!file.existsAsFile())migrate();Connection c(file);{Statement version(c.db,"PRAGMA user_version");if(!version.row()||version.number(0)!=2)throw std::runtime_error("Unsupported library database version");}c.exec("PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL;");anchor=std::make_unique<Connection>(file);anchor->exec("PRAGMA synchronous=FULL;");lock.exit();}catch(...){lock.exit();throw;}
  }
  static std::shared_ptr<LocalDatabase> open(juce::File folder){static std::mutex mutex;static std::map<juce::String,std::shared_ptr<LocalDatabase>> instances;std::lock_guard<std::mutex> guard(mutex);auto& instance=instances[folder.getFullPathName()];if(!instance)instance=std::make_shared<LocalDatabase>(folder);return instance;}
+ uint64_t metadataSerial(juce::String kind){poll();return revision(kind);}
  juce::String integrity(){Connection c(file,false);Statement s(c.db,"PRAGMA integrity_check");return s.row()?s.text(0):"failed";}
  std::vector<juce::String> poll(bool force=false){std::unique_lock<std::mutex> polling(pollMutex,std::defer_lock);if(force)polling.lock();else if(!polling.try_lock())return {};auto now=juce::Time::getMillisecondCounterHiRes();{std::lock_guard<std::mutex> guard(cacheMutex);if(!force&&now-polled<250)return {};polled=now;}
   Connection c(file,false);Statement s(c.db,"SELECT kind,revision FROM revisions");std::vector<std::pair<juce::String,uint64_t>> found;while(s.row())found.push_back({s.text(0),(uint64_t)s.number(1)});std::vector<juce::String> changed;

@@ -846,3 +846,4 @@ int runSfzFileCheck(const char* path){Processor p(false);auto data=p.readAudio(j
 #include "Anchor352Checks.h"
 
 #include "Stretch360Checks.h"
+#include "Features370Checks.h"
