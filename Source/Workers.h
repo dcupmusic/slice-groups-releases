@@ -1,29 +1,35 @@
 #pragma once
 #include "Processor.h"
+#include "SamplePreparation.h"
+#include "NativeTrash.h"
 
 class LoopLoader final : public juce::Thread {
  Processor& p;juce::CriticalSection queueLock;juce::WaitableEvent wake;juce::File next;uint64_t serial=0,warmSerial=0;juce::Array<juce::File> upcoming;juce::String warmSignature;
- struct Cache{juce::File file;juce::Time modified;std::shared_ptr<const AudioData> data;};std::vector<Cache> cache;
- std::shared_ptr<const AudioData> readCached(juce::File file,std::function<bool()> cancel={}){auto modified=file.getLastModificationTime();for(auto it=cache.begin();it!=cache.end();++it)if(!file.hasFileExtension("sfz")&&it->file==file&&it->modified==modified){auto hit=*it;cache.erase(it);cache.push_back(hit);return hit.data;}auto data=p.readAudio(file,cancel);if(data){if(cache.size()>=8)cache.erase(cache.begin());cache.push_back({file,modified,data});}return data;}
+ bool canWarm(juce::File file){if(LibraryStore::playbackType(file)!=4||file.hasFileExtension("sfz;sgpreset"))return false;std::unique_ptr<juce::AudioFormatReader> reader(p.formats.createReaderFor(file));return reader&&reader->sampleRate>0&&reader->lengthInSamples/reader->sampleRate<=120&&(double)reader->lengthInSamples*reader->numChannels*4*1.15<=DecodedSampleCache::budget/3;}
+ std::shared_ptr<const AudioData> readCached(juce::File file,std::function<bool()> cancel={}){if(auto data=DecodedSampleCache::instance().get(file))return data;auto modified=file.getLastModificationTime();auto size=file.getSize();auto data=p.readAudio(file,cancel);if(data&&(!cancel||!cancel()))DecodedSampleCache::instance().put(file,data,modified,size);return data;}
+
 public:
- std::atomic<bool> busy{false};std::function<void(bool,juce::File,uint64_t)> completed;
+ std::atomic<bool> busy{false};std::atomic<double> lastLoadMs{0};std::function<void(bool,juce::File,uint64_t)> completed;
  explicit LoopLoader(Processor& processor):Thread("Slice Groups file loader"),p(processor){}
  ~LoopLoader()override{signalThreadShouldExit();wake.signal();stopThread(-1);}
- void request(juce::File file){const juce::ScopedLock g(queueLock);next=file;serial=++p.loadGeneration;busy=true;wake.signal();}
+ void request(juce::File file){const juce::ScopedLock g(queueLock);next=file;serial=++p.loadGeneration;busy=true;++LibraryPreparation::epoch;wake.signal();}
  void cancel(){const juce::ScopedLock g(queueLock);next=juce::File();serial=++p.loadGeneration;upcoming.clear();++warmSerial;busy=false;wake.signal();}
  void prepareUpcoming(juce::Array<juce::File> files,juce::String signature){const juce::ScopedLock g(queueLock);if(files==upcoming&&signature==warmSignature)return;upcoming=std::move(files);warmSignature=signature;++warmSerial;wake.signal();}
- void run()override{uint64_t warmed=0;while(!threadShouldExit()){
+ void run()override{uint64_t warmed=0;std::unique_ptr<Processor> previewEngine;while(!threadShouldExit()){
   bool queued;{const juce::ScopedLock g(queueLock);queued=next!=juce::File();}if(!queued)wake.wait(50);if(threadShouldExit())break;juce::File file;uint64_t token,warmToken;juce::Array<juce::File> candidates;
   {const juce::ScopedLock g(queueLock);file=next;token=serial;next=juce::File();warmToken=warmSerial;candidates=upcoming;}
-  if(file!=juce::File()){auto preset=file.hasFileExtension("sgpreset")?juce::XmlDocument::parse(file):nullptr;auto source=preset?juce::File(preset->getStringAttribute("file")):file;auto data=preset&&preset->hasTagName("SliceGroupsRack")?std::shared_ptr<const AudioData>{}:readCached(source,[&]{return threadShouldExit()||token!=p.loadGeneration.load();});if(threadShouldExit()||token!=p.loadGeneration.load())continue;bool ok=file.hasFileExtension("sgpreset")?(preset&&p.installPreset(data,*preset,token)):p.installAudio(data,true,token);auto callback=completed;juce::MessageManager::callAsync([token,callback,ok,file]{if(callback)callback(ok,file,token);});}
-  if(warmed==warmToken||candidates.isEmpty())continue;
-  auto cancelled=[&]{const juce::ScopedLock g(queueLock);return threadShouldExit()||next!=juce::File()||warmSerial!=warmToken||serial!=token;};
+  if(file!=juce::File()){setPriority(juce::Thread::Priority::normal);LibraryPreparation::Foreground priority;auto started=juce::Time::getMillisecondCounterHiRes();auto preset=file.hasFileExtension("sgpreset")?juce::XmlDocument::parse(file):nullptr;auto source=preset?juce::File(preset->getStringAttribute("file")):file;auto data=preset&&preset->hasTagName("SliceGroupsRack")?std::shared_ptr<const AudioData>{}:readCached(source,[&]{return threadShouldExit()||token!=p.loadGeneration.load();});if(threadShouldExit()||token!=p.loadGeneration.load())continue;bool ok=file.hasFileExtension("sgpreset")?(preset&&p.installPreset(data,*preset,token)):p.installAudio(data,true,token);lastLoadMs=juce::Time::getMillisecondCounterHiRes()-started;auto callback=completed;juce::MessageManager::callAsync([token,callback,ok,file]{if(callback)callback(ok,file,token);});}
+  if(warmed==warmToken||candidates.isEmpty()||LibraryPreparation::checksPaused||LibraryPreparation::suspended||LibraryPreparation::playbackBusy())continue;setPriority(juce::Thread::Priority::background);LibraryPreparation::WarmJob warmProgress;if(!warmProgress)continue;LibraryPreparation::Foreground warmingPriority;
+  auto cancelled=[&]{const juce::ScopedLock g(queueLock);return threadShouldExit()||LibraryPreparation::checksPaused||LibraryPreparation::suspended||LibraryPreparation::playbackBusy()||next!=juce::File()||warmSerial!=warmToken||serial!=token;};
+  for(int i=candidates.size();--i>=0;)if(!canWarm(candidates[i]))candidates.remove(i);if(candidates.isEmpty()){warmed=warmToken;continue;}
+  // Decode upcoming files before waiting for the current stretch render. A click
+  // can then use decoded audio even when speculative stretching is still pending.
+  for(auto candidate:candidates){if(cancelled())break;if(LibraryStore::playbackType(candidate)==4&&!candidate.hasFileExtension("sgpreset"))readCached(candidate,cancelled);}
   while(p.stretchWorker.busy&&!cancelled())wake.wait(20);if(cancelled())continue;
-  std::shared_ptr<const AudioData> current;std::unique_ptr<juce::XmlElement> settings;double tempo;bool host,locked,stretch;double bars;{const juce::ScopedLock g(p.lock);if(!p.audio){warmed=warmToken;continue;}stretch=p.stretchMode&&!p.trackMode;current=p.audio;settings=p.configurationXml(true);tempo=p.hostBpm;host=p.hasHost;locked=p.loopLengthLocked;bars=p.lockedBars;}
-  if(!stretch){for(auto candidate:candidates){if(cancelled())break;auto preset=candidate.hasFileExtension("sgpreset")?juce::XmlDocument::parse(candidate):nullptr;readCached(preset?juce::File(preset->getStringAttribute("file")):candidate,cancelled);}if(!cancelled())warmed=warmToken;continue;}
-  Processor preview(false);preview.audio=current;preview.applyConfiguration(*settings,true);preview.swingLinked=false;preview.autoSave=false;preview.autoCategories=false;preview.loopLengthLocked=locked;preview.lockedBars=bars;
-  for(auto candidate:candidates){if(cancelled())break;auto preset=candidate.hasFileExtension("sgpreset")?juce::XmlDocument::parse(candidate):nullptr;auto source=preset?juce::File(preset->getStringAttribute("file")):candidate;auto data=readCached(source,cancelled);if(!data||cancelled())continue;
-   preview.audio=current;preview.applyConfiguration(*settings,true);preview.swingLinked=false;preview.autoSave=false;preview.autoCategories=false;preview.hasHost=host;preview.hostBpm=tempo;
+  std::shared_ptr<const AudioData> current;std::unique_ptr<juce::XmlElement> settings;double tempo;bool host,locked,stretch;double bars;{const juce::ScopedLock g(p.lock);stretch=p.stretchMode&&!p.trackMode;current=p.audio;settings=p.configurationXml(true);tempo=p.hostBpm;host=p.hasHost;locked=p.loopLengthLocked;bars=p.lockedBars;}
+  if(!previewEngine){previewEngine=std::make_unique<Processor>(false);previewEngine->trackOffline=true;previewEngine->historySuppressed=1;previewEngine->stretchWorker.signalThreadShouldExit();previewEngine->stretchWorker.stopThread(-1);}auto& preview=*previewEngine;preview.audio=current;if(current)preview.applyConfiguration(*settings,true);else{preview.pitchSemitones=settings->getDoubleAttribute("pitch");preview.keyLocked=settings->getBoolAttribute("keyLocked");preview.targetKey=settings->getIntAttribute("targetKey");}preview.swingLinked=false;preview.autoSave=false;preview.autoCategories=false;preview.loopLengthLocked=locked;preview.lockedBars=bars;
+  for(auto candidate:candidates){if(cancelled())break;if(LibraryStore::playbackType(candidate)!=4)continue;auto preset=candidate.hasFileExtension("sgpreset")?juce::XmlDocument::parse(candidate):nullptr;auto source=preset?juce::File(preset->getStringAttribute("file")):candidate;auto data=readCached(source,cancelled);if(!data||cancelled())continue;
+   preview.audio=current;if(current)preview.applyConfiguration(*settings,true);preview.swingLinked=false;preview.autoSave=false;preview.autoCategories=false;preview.hasHost=host;preview.hostBpm=tempo;
    bool ok=preset?preview.installPreset(data,*preset):preview.installAudio(data,true,0,false);if(!ok||!preview.stretchMode||preview.trackMode||cancelled())continue;auto request=preview.stretchRequest();if(!p.stretchWorker.cached(request)){auto result=StretchWorker::render(request,cancelled);if(result&&!cancelled())p.stretchWorker.cachePrepared(result);}
   }if(!cancelled())warmed=warmToken;
  }}
@@ -46,46 +52,127 @@ public:
 };
 
 class FolderAnalyser final:public juce::Thread{
- Processor& p;LoopLoader& loader;juce::CriticalSection mutex;juce::WaitableEvent wake;juce::Array<juce::File> files;uint64_t revision=0;
 public:
- FolderAnalyser(Processor& processor,LoopLoader& worker):Thread("Slice Groups folder analysis"),p(processor),loader(worker){startThread(juce::Thread::Priority::low);}
- ~FolderAnalyser()override{signalThreadShouldExit();wake.signal();stopThread(-1);}
- void request(juce::Array<juce::File> list){const juce::ScopedLock lock(mutex);files=std::move(list);++revision;wake.signal();}
- void run()override{uint64_t done=0;while(!threadShouldExit()){wake.wait(50);juce::Array<juce::File> list;uint64_t token;{const juce::ScopedLock lock(mutex);if(done==revision)continue;token=revision;list=files;}auto changed=[&]{const juce::ScopedLock lock(mutex);return threadShouldExit()||revision!=token;};for(auto file:list){if(changed())break;if(file.isDirectory()||(AnalysisStore::exists(file)&&LoopLoudness::exists(file)))continue;bool completed=false;while(!completed&&!changed()){if(loader.busy){wake.wait(50);continue;}auto generation=p.loadGeneration.load();auto cancelled=[&]{return changed()||loader.busy||generation!=p.loadGeneration.load();};auto data=p.readAudio(file,cancelled);if(!cancelled())completed=true;else wake.wait(50);}}if(!changed())done=token;}}
+ FolderAnalyser(Processor&,LoopLoader&):Thread("Slice Groups preparation dispatcher"){}
+ void run()override{}
+ void request(juce::Array<juce::File> list){if(!threadShouldExit()&&!list.isEmpty())LibraryPreparation::request(std::move(list));}
 };
 
 // Enumerates names only. No decoding, hashing, or transient analysis for search.
 class BrowserSearchIndex final:public juce::Thread {
-    juce::CriticalSection mutex;juce::WaitableEvent wake;juce::File root;std::atomic<uint64_t> revision{0};
+    juce::CriticalSection mutex;juce::WaitableEvent wake;juce::File root;bool forceRefresh=false;std::atomic<uint64_t> revision{0};
 public:
+    struct PreparedView{juce::Array<juce::File> files,folders,direct;std::set<juce::String> folderPaths;std::map<juce::String,int> nameCounts;};
+    std::function<void(juce::File,std::shared_ptr<PreparedView>,uint64_t)> completedPrepared;
     std::function<void(juce::File,juce::Array<juce::File>,uint64_t)> completed;
     BrowserSearchIndex():Thread("Slice Groups browser search"){startThread(juce::Thread::Priority::low);}
     ~BrowserSearchIndex()override{signalThreadShouldExit();wake.signal();stopThread(-1);}
-    uint64_t request(juce::File folder){const juce::ScopedLock g(mutex);root=folder;auto token=++revision;wake.signal();return token;}
+    uint64_t request(juce::File folder,bool refresh=false){const juce::ScopedLock g(mutex);root=folder;forceRefresh=refresh;auto token=++revision;wake.signal();return token;}
     static juce::Array<juce::File> enumerate(juce::File folder,std::function<bool()> cancelled={},bool includeFolders=false){
         juce::AudioFormatManager formats;formats.registerBasicFormats();juce::Array<juce::File> result;std::vector<juce::File> pending{folder};
         while(!pending.empty()){if(cancelled&&cancelled())return {};auto current=pending.back();pending.pop_back();for(auto entry:juce::RangedDirectoryIterator(current,false,"*",juce::File::findFilesAndDirectories)){if(cancelled&&cancelled())return {};auto file=entry.getFile();if(file.getFileName().startsWithChar('.')||file.isSymbolicLink())continue;if(file.isDirectory()){pending.push_back(file);if(includeFolders)result.add(file);}else if(file.hasFileExtension("sfz")||formats.findFormatForFileExtension(file.getFileExtension()))result.add(file);}}
         struct Sort{int compareElements(const juce::File& a,const juce::File& b)const{int n=a.getFileName().compareIgnoreCase(b.getFileName());return n?n:a.getFullPathName().compareIgnoreCase(b.getFullPathName());}} sort;result.sort(sort);return result;
     }
-    static juce::File indexFile(juce::File root){auto folder=LibraryStore::root().getChildFile("search-index");folder.createDirectory();return folder.getChildFile(juce::String::toHexString(root.getFullPathName().hashCode64())+".json");}
-    static juce::Array<juce::File> cached(juce::File root){juce::Array<juce::File> files;auto value=juce::JSON::parse(indexFile(root));if(auto* array=value.getArray())for(auto item:*array)files.add(juce::File(item.toString()));return files;}
-    void run()override{uint64_t last=0;while(!threadShouldExit()){wake.wait(100);if(threadShouldExit())break;juce::File folder;uint64_t token;{const juce::ScopedLock g(mutex);folder=root;token=revision.load();}if(token==last)continue;last=token;if(!folder.isDirectory())continue;auto cancelled=[&]{return threadShouldExit()||revision.load()!=token;};auto roots=folder==LibraryStore::browserRoot()?LibraryStore::libraryRoots():juce::Array<juce::File>{folder};auto deliver=[&](juce::Array<juce::File> found){auto callback=completed;juce::MessageManager::callAsync([callback,folder,found=std::move(found),token]()mutable{if(callback)callback(folder,std::move(found),token);});};juce::Array<juce::File> stored;bool hasCache=true;for(auto root:roots){hasCache&=indexFile(root).existsAsFile();if(folder==LibraryStore::browserRoot())stored.add(root);stored.addArray(cached(root));}if(hasCache&&!cancelled()){struct Sort{int compareElements(const juce::File&a,const juce::File&b)const{int n=a.getFileName().compareIgnoreCase(b.getFileName());return n?n:a.getFullPathName().compareIgnoreCase(b.getFullPathName());}}sort;stored.sort(sort);deliver(stored);}juce::Array<juce::File> fresh;for(auto root:roots){if(cancelled())break;if(folder==LibraryStore::browserRoot())fresh.add(root);auto found=enumerate(root,cancelled,true);if(cancelled())break;juce::Array<juce::var> paths;for(auto file:found)paths.add(file.getFullPathName());juce::TemporaryFile temporary(indexFile(root));if(temporary.getFile().replaceWithText(juce::JSON::toString(juce::var(paths))))temporary.overwriteTargetFileWithTemporary();fresh.addArray(found);}if(!cancelled()){struct Sort{int compareElements(const juce::File&a,const juce::File&b)const{int n=a.getFileName().compareIgnoreCase(b.getFileName());return n?n:a.getFullPathName().compareIgnoreCase(b.getFullPathName());}}sort;fresh.sort(sort);for(int i=fresh.size()-1;i>0;--i)if(fresh[i]==fresh[i-1])fresh.remove(i);deliver(std::move(fresh));}}}
+    static juce::File indexFile(juce::File root){return LibraryStore::root().getChildFile("search-index").getChildFile(juce::String::toHexString(root.getFullPathName().hashCode64())+".json");}
+    static bool indexExists(juce::File root){try{return LibraryStore::database()->hasCatalog(root);}catch(...){return false;}}
+    static void invalidate(juce::File root){LibraryStore::database()->invalidateCatalog(root);}
+    static void store(juce::File root,const juce::Array<juce::File>& files){LibraryStore::database()->setCatalog(root,files);}
+    static juce::Array<juce::File> cached(juce::File root){try{return LibraryStore::database()->catalog(root);}catch(...){return {};}}
+    void run()override{uint64_t last=0;while(!threadShouldExit()){wake.wait(100);if(threadShouldExit())break;juce::File folder;uint64_t token;bool refresh;{const juce::ScopedLock g(mutex);folder=root;token=revision.load();refresh=forceRefresh;}if(token==last)continue;last=token;if(!folder.isDirectory())continue;auto cancelled=[&]{return threadShouldExit()||revision.load()!=token;};auto roots=folder==LibraryStore::browserRoot()?LibraryStore::libraryRoots():juce::Array<juce::File>{folder};auto deliver=[&](juce::Array<juce::File> found){auto callback=completed;auto preparedCallback=completedPrepared;
+            if(preparedCallback){auto view=std::make_shared<PreparedView>();for(auto file:found){if(cancelled())return;if(file.getParentDirectory()==folder)view->direct.add(file);if(file.isDirectory()){view->folders.add(file);view->folderPaths.insert(file.getFullPathName());}else{view->files.add(file);++view->nameCounts[file.getFileName().toLowerCase()];}}
+                juce::MessageManager::callAsync([preparedCallback,folder,view,token]{preparedCallback(folder,view,token);});
+            }else juce::MessageManager::callAsync([callback,folder,found=std::move(found),token]()mutable{if(callback)callback(folder,std::move(found),token);});};juce::Array<juce::File> stored;bool hasCache=true;for(auto root:roots){hasCache&=indexExists(root);if(folder==LibraryStore::browserRoot())stored.add(root);stored.addArray(cached(root));}if(hasCache&&!cancelled()){struct Sort{int compareElements(const juce::File&a,const juce::File&b)const{int n=a.getFileName().compareIgnoreCase(b.getFileName());return n?n:a.getFullPathName().compareIgnoreCase(b.getFullPathName());}}sort;stored.sort(sort);deliver(stored);if(!refresh)continue;}juce::Array<juce::File> fresh;for(auto root:roots){if(cancelled())break;if(folder==LibraryStore::browserRoot())fresh.add(root);auto found=enumerate(root,cancelled,true);if(cancelled())break;try{store(root,found);}catch(const std::exception& e){std::cerr<<"Browser index: "<<e.what()<<"\n";}fresh.addArray(found);}if(!cancelled()){struct Sort{int compareElements(const juce::File&a,const juce::File&b)const{int n=a.getFileName().compareIgnoreCase(b.getFileName());return n?n:a.getFullPathName().compareIgnoreCase(b.getFullPathName());}}sort;fresh.sort(sort);for(int i=fresh.size()-1;i>0;--i)if(fresh[i]==fresh[i-1])fresh.remove(i);deliver(std::move(fresh));}}}
 
 };
 
-// Finder trash operations may block for seconds; this worker survives editor/engine switches.
+namespace LibraryPreparation {
+class Worker final:private juce::Thread,public juce::DeletedAtShutdown {
+ struct Job{juce::File scope;uint64_t cancellation=0;};
+ juce::CriticalSection mutex;juce::WaitableEvent wake;std::vector<Job> queue;std::atomic<uint64_t> cancellation{0};std::atomic<int> queued{0},done{0},total{0};std::atomic<bool> active{false};
+ void run()override{Processor decoder(false);decoder.trackOffline=true;decoder.autoSave=false;decoder.stretchWorker.signalThreadShouldExit();decoder.stretchWorker.stopThread(-1);
+  while(!threadShouldExit()){
+   if(checksPaused||suspended||foreground>0||playbackBusy()){wake.wait(30);continue;}
+   Job job;{const juce::ScopedLock guard(mutex);if(!queue.empty()){job=queue.front();queue.erase(queue.begin());queued=(int)queue.size();}}
+   if(job.scope==juce::File()){active=false;wake.wait(100);continue;}active=true;done=0;total=0;
+   auto aborted=[&]{return threadShouldExit()||checksPaused||suspended||cancellation.load()!=job.cancellation;};
+   auto files=job.scope.isDirectory()?BrowserSearchIndex::enumerate(job.scope,[&]{while(!aborted()&&(foreground>0||playbackBusy()))wake.wait(30);return aborted();},false):juce::Array<juce::File>{job.scope};
+   if(aborted()){active=false;continue;}
+   auto types=LibraryStore::read("playback-types.json");for(int i=files.size();--i>=0;)if(LibraryStore::typeFromValues(files[i],types)!=4||files[i].hasFileExtension("sfz"))files.remove(i);total=files.size();
+   for(int i=0;i<files.size()&&!aborted();){
+    if(foreground>0||playbackBusy()){wake.wait(30);continue;}auto file=files[i];auto token=epoch.load();auto cancelled=[&]{return aborted()||foreground>0||playbackBusy()||epoch.load()!=token;};
+    if(!file.existsAsFile()||LibraryStore::playbackType(file)!=4||(AnalysisStore::exists(file)&&LoopLoudness::exists(file))){++i;++done;continue;}
+    std::unique_ptr<juce::AudioFormatReader> header(decoder.formats.createReaderFor(file));if(!header||header->sampleRate<=0||header->lengthInSamples/header->sampleRate>120||(double)header->lengthInSamples*header->numChannels*4>DecodedSampleCache::budget){++i;++done;continue;}header.reset();
+    // Whole-folder preparation persists source analysis only. It must not evict
+    // nearby decoded/rendered samples from the bounded audition caches.
+    auto data=decoder.readAudio(file,cancelled);if(cancelled()){wake.wait(20);continue;}++i;++done;wake.wait(10);
+   }active=false;
+  }
+ }
+public:
+ inline static std::atomic<Worker*> instance{nullptr};
+ Worker():juce::Thread("Slice Groups selected Stretch preparation"){startThread(juce::Thread::Priority::background);}
+ ~Worker()override{signalThreadShouldExit();wake.signal();stopThread(-1);instance.store(nullptr);}
+ void enqueue(juce::File scope){if(checksPaused||scope==juce::File()||scope==LibraryStore::browserRoot())return;suspended=false;const juce::ScopedLock guard(mutex);for(auto& job:queue)if(job.scope==scope)return;queue.push_back({scope,cancellation.load()});queued=(int)queue.size();wake.signal();}
+ void cancelAll(){suspended=true;++cancellation;++epoch;const juce::ScopedLock guard(mutex);queue.clear();queued=0;active=false;wake.signal();}
+ bool isBusy()const{return active||queued>0;}
+ juce::String statusText(){if(!isBusy())return {};if(playbackBusy())return "STRETCH PREP: PAUSED (PLAYBACK)";if(foreground>0)return "STRETCH PREP: WAITING";return total>0?"STRETCH PREP "+juce::String(done.load())+" / "+juce::String(total.load()):"STRETCH PREP: SCANNING...";}
+};
+inline Worker& worker(){static std::mutex mutex;std::lock_guard<std::mutex> guard(mutex);auto* instance=Worker::instance.load();if(!instance){instance=new Worker;Worker::instance=instance;}return *instance;}
+// Browsing/importing/Refresh never starts library preparation.
+inline void request(juce::Array<juce::File>){}
+inline void requestScope(juce::File){}
+inline void requestStretch(juce::File folder){if(!checksPaused)worker().enqueue(folder);}
+inline void cancel(){suspended=true;++epoch;if(auto* instance=Worker::instance.load())instance->cancelAll();}
+inline bool busy(){auto* instance=Worker::instance.load();return !checksPaused&&!suspended&&(warmJobs>0||(instance&&instance->isBusy()));}
+inline juce::String status(){if(checksPaused||suspended)return {};if(auto* instance=Worker::instance.load()){auto text=instance->statusText();if(text.isNotEmpty())return text;}return warmJobs>0?"PREPARING NEARBY STRETCH...":juce::String();}
+}
+
+// Undo records retain the actual macOS Trash URL, never an inferred filename.
 class FileTrashWorker final:private juce::Thread {
- juce::CriticalSection mutex;juce::WaitableEvent wake;std::vector<juce::Array<juce::File>> queue;juce::Array<juce::File> hidden;std::set<juce::String> pending;
- std::function<void(juce::Array<juce::File>,juce::Array<juce::File>)> completed;
- std::shared_ptr<std::atomic<bool>> alive=std::make_shared<std::atomic<bool>>(true);
- void run()override{while(!threadShouldExit()){juce::Array<juce::File> batch;{const juce::ScopedLock lock(mutex);if(!queue.empty()){batch=std::move(queue.front());queue.erase(queue.begin());}}if(batch.isEmpty()){wake.wait(100);continue;}juce::Array<juce::File> moved,failed;for(auto file:batch){if(file.existsAsFile()&&file.moveToTrash())moved.add(file);else failed.add(file);{const juce::ScopedLock lock(mutex);pending.erase(file.getFullPathName());if(failed.contains(file))hidden.removeAllInstancesOf(file);}}
- // Remove stale cached rows too; live browser results are pruned immediately by the editor.
- for(auto root:LibraryStore::libraryRoots()){bool affected=false;for(auto file:moved)affected|=file.isAChildOf(root);if(!affected)continue;auto stored=BrowserSearchIndex::cached(root);for(auto file:moved)stored.removeAllInstancesOf(file);juce::Array<juce::var> paths;for(auto file:stored)paths.add(file.getFullPathName());juce::TemporaryFile temp(BrowserSearchIndex::indexFile(root));if(temp.getFile().replaceWithText(juce::JSON::toString(juce::var(paths))))temp.overwriteTargetFileWithTemporary();}
- std::function<void(juce::Array<juce::File>,juce::Array<juce::File>)> callback;{const juce::ScopedLock lock(mutex);callback=completed;}auto life=alive;juce::MessageManager::callAsync([life,callback,moved,failed]{if(life->load()&&callback)callback(moved,failed);});}}
+ struct Item{juce::File original,location;bool trashed=false;};
+ struct Batch{uint64_t order=0;std::vector<Item> items;};
+ struct Job{std::shared_ptr<Batch> batch;bool restore=false,initial=false;uint64_t epoch=0;};
+ juce::CriticalSection mutex;juce::WaitableEvent wake;std::vector<Job> queue;std::vector<std::shared_ptr<Batch>> undo,redo;
+ juce::Array<juce::File> hidden;std::set<juce::String> pending;bool historyBusy=false;uint64_t redoEpoch=0;
+ using Callback=std::function<void(juce::Array<juce::File>,juce::Array<juce::File>,bool)>;Callback completed;
+ std::shared_ptr<std::atomic<bool>> alive=std::make_shared<std::atomic<bool>>(true);juce::String errorText;
+ static bool covered(juce::File file,const juce::Array<juce::File>& roots){for(auto root:roots)if(file==root||file.isAChildOf(root))return true;return false;}
+ void updateIndexes(const juce::Array<juce::File>& changed,bool restoring){for(auto root:LibraryStore::libraryRoots()){
+  bool affected=false;for(auto file:changed)affected|=file==root||file.isAChildOf(root)||root.isAChildOf(file);if(!affected)continue;
+  if(restoring){BrowserSearchIndex::invalidate(root);continue;}
+  auto stored=BrowserSearchIndex::cached(root);for(int i=stored.size();--i>=0;)if(covered(stored[i],changed))stored.remove(i);
+  BrowserSearchIndex::store(root,stored);
+ }}
+ void run()override{while(!threadShouldExit()){
+  Job job;{const juce::ScopedLock guard(mutex);if(!queue.empty()){job=queue.front();queue.erase(queue.begin());}}if(!job.batch){wake.wait(100);continue;}
+  juce::Array<juce::File> changed,failed;juce::String error;
+  for(auto& item:job.batch->items){if(job.restore&&!item.trashed||!job.restore&&item.trashed)continue;bool ok=job.restore?NativeTrash::restore(item.location,item.original,error):NativeTrash::move(item.original,item.location,error);
+   if(ok){item.trashed=!job.restore;changed.add(item.original);}else failed.add(item.original);
+   {const juce::ScopedLock guard(mutex);pending.erase(item.original.getFullPathName());if(job.restore&&ok||!job.restore&&!ok)hidden.removeAllInstancesOf(item.original);else if(!job.restore&&ok)hidden.addIfNotAlreadyThere(item.original);}
+  }
+  try{updateIndexes(changed,job.restore);}catch(const std::exception& e){std::cerr<<"Trash index refresh: "<<e.what()<<"\n";}
+  Callback callback;{const juce::ScopedLock guard(mutex);errorText=error;for(auto& item:job.batch->items)pending.erase(item.original.getFullPathName());
+   auto erase=[&](auto& list){list.erase(std::remove(list.begin(),list.end(),job.batch),list.end());};
+   if(job.initial){if(std::none_of(job.batch->items.begin(),job.batch->items.end(),[](const Item& i){return i.trashed;}))erase(undo);}
+   else if(failed.isEmpty()){erase(job.restore?undo:redo);if(job.restore){if(job.epoch==redoEpoch)redo.push_back(job.batch);}else undo.push_back(job.batch);}
+   if(!job.initial)historyBusy=false;callback=completed;
+  }
+  auto life=alive;juce::MessageManager::callAsync([life,callback,changed,failed,restoring=job.restore]{if(life->load()&&callback)callback(changed,failed,restoring);});
+ }}
 public:
  FileTrashWorker():juce::Thread("Slice Groups trash"){startThread(juce::Thread::Priority::low);}
  ~FileTrashWorker()override{*alive=false;signalThreadShouldExit();wake.signal();stopThread(-1);}
- void setCompleted(std::function<void(juce::Array<juce::File>,juce::Array<juce::File>)> callback){const juce::ScopedLock lock(mutex);completed=std::move(callback);}
- void request(juce::Array<juce::File> files){const juce::ScopedLock lock(mutex);juce::Array<juce::File> batch;for(auto file:files)if(pending.insert(file.getFullPathName()).second){hidden.addIfNotAlreadyThere(file);batch.add(file);}if(!batch.isEmpty())queue.push_back(std::move(batch));wake.signal();}
- juce::Array<juce::File> hiddenFiles(bool restored=false){const juce::ScopedLock lock(mutex);if(restored)for(int i=hidden.size();--i>=0;)if(!pending.count(hidden[i].getFullPathName())&&hidden[i].existsAsFile())hidden.remove(i);return hidden;}
+ void setCompleted(Callback callback){const juce::ScopedLock guard(mutex);completed=std::move(callback);}
+ void discardRedo(){const juce::ScopedLock guard(mutex);redo.clear();++redoEpoch;}
+ void request(juce::Array<juce::File> files){auto batch=std::make_shared<Batch>();batch->order=Processor::nextHistoryOrder();
+  // Collapse parent/child selections so one folder is never trashed twice.
+  for(auto file:files){bool nested=false;for(auto parent:files)if(parent!=file&&file.isAChildOf(parent)){nested=true;break;}if(!nested)batch->items.push_back({file,{ },false});}
+  const juce::ScopedLock guard(mutex);batch->items.erase(std::remove_if(batch->items.begin(),batch->items.end(),[&](const Item& item){return !pending.insert(item.original.getFullPathName()).second;}),batch->items.end());
+  if(batch->items.empty())return;for(auto& item:batch->items)hidden.addIfNotAlreadyThere(item.original);redo.clear();++redoEpoch;undo.push_back(batch);while(undo.size()>100)undo.erase(undo.begin());queue.push_back({batch,false,true,redoEpoch});wake.signal();
+ }
+ uint64_t nextOrder(bool redoAction){const juce::ScopedLock guard(mutex);const auto& entries=redoAction?redo:undo;return historyBusy||entries.empty()?0:entries.back()->order;}
+ bool undoRedo(bool redoAction){const juce::ScopedLock guard(mutex);auto& entries=redoAction?redo:undo;if(historyBusy||entries.empty())return false;historyBusy=true;auto batch=entries.back();for(auto& item:batch->items)pending.insert(item.original.getFullPathName());queue.push_back({batch,!redoAction,false,redoEpoch});wake.signal();return true;}
+ bool historyPending(){const juce::ScopedLock guard(mutex);return historyBusy;}
+ juce::String lastError(){const juce::ScopedLock guard(mutex);return errorText;}
+ juce::Array<juce::File> hiddenFiles(bool restored=false){const juce::ScopedLock guard(mutex);if(restored)for(int i=hidden.size();--i>=0;)if(!pending.count(hidden[i].getFullPathName())&&hidden[i].exists())hidden.remove(i);return hidden;}
 };

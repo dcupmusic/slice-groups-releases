@@ -780,7 +780,7 @@ int runAutoToggleChecks(){Processor p(false);p.repeatCategories=true;p.autoCateg
 
 int runLoadBenchmark(const char* path){Processor p(false);p.autoCategories=true;auto start=juce::Time::getMillisecondCounterHiRes();auto audio=p.readAudio(juce::File(path));auto read=juce::Time::getMillisecondCounterHiRes();if(!audio)return 1;p.installAudio(audio,true,0,false);auto loaded=juce::Time::getMillisecondCounterHiRes();std::cout<<"Read/decode/waveform/transients: "<<read-start<<" ms; install/settings/categories: "<<loaded-read<<" ms\n";start=juce::Time::getMillisecondCounterHiRes();p.installAudio(audio,true,0,false);std::cout<<"Cached metadata recall: "<<juce::Time::getMillisecondCounterHiRes()-start<<" ms\n";start=juce::Time::getMillisecondCounterHiRes();auto cached=p.readAudio(juce::File(path));std::cout<<"Disk-cached audio loading: "<<juce::Time::getMillisecondCounterHiRes()-start<<" ms; analysis hit: "<<(cached&&cached->analysisCacheHit)<<"\n";return 0;}
 
-int runFolderAnalysisChecks(){Processor p(false);auto source=LibraryStore::root().getChildFile("analysis-fixture-120.wav");juce::AudioBuffer<float> buffer(1,96000);for(int n=0;n<96000;++n)buffer.setSample(0,n,n%12000<1000?.3f*std::sin(n*.2):0);if(!writeRenderedAudio(source,buffer,48000))return 1280;auto first=p.readAudio(source);if(!first||first->analysisCacheHit||!AnalysisStore::exists(source))return 1281;auto second=p.readAudio(source);if(!second||!second->analysisCacheHit||second->contentHash!=first->contentHash||second->transients!=first->transients||second->peaks!=first->peaks||second->analysedTiming.bpm!=first->analysedTiming.bpm)return 1282;auto a=first->waveformRange(123,54321),b=second->waveformRange(123,54321);if(a.low!=b.low||a.high!=b.high)return 1283;source.setLastModificationTime(source.getLastModificationTime()+juce::RelativeTime::seconds(2));if(AnalysisStore::exists(source))return 1284;auto changed=p.readAudio(source);if(!changed||changed->analysisCacheHit)return 1285;if(p.readAudio(source,[]{return true;}))return 1286;AnalysisStore::fileFor(source).deleteFile();LoopLoader loader(p);loader.busy=true;FolderAnalyser analyser(p,loader);analyser.request({source});juce::Thread::sleep(100);if(AnalysisStore::exists(source))return 1287;loader.busy=false;bool ready=false;for(int i=0;i<300;++i){if(AnalysisStore::exists(source)){ready=true;break;}juce::Thread::sleep(10);}if(!ready)return 1288;std::cout<<"Persistent folder analysis, waveform/transient/BPM recall, invalidation, cancellation and foreground priority passed\n";return 0;}
+int runFolderAnalysisChecks(){juce::ScopedJuceInitialiser_GUI gui;Processor p(false);auto source=LibraryStore::root().getChildFile("analysis-fixture-120.wav");juce::AudioBuffer<float> buffer(1,96000);for(int n=0;n<96000;++n)buffer.setSample(0,n,n%12000<1000?.3f*std::sin(n*.2):0);if(!writeRenderedAudio(source,buffer,48000))return 1280;auto first=p.readAudio(source);if(!first||first->analysisCacheHit||!AnalysisStore::exists(source))return 1281;auto second=p.readAudio(source);if(!second||!second->analysisCacheHit||second->contentHash!=first->contentHash||second->transients!=first->transients||second->peaks!=first->peaks||second->analysedTiming.bpm!=first->analysedTiming.bpm)return 1282;auto a=first->waveformRange(123,54321),b=second->waveformRange(123,54321);if(a.low!=b.low||a.high!=b.high)return 1283;source.setLastModificationTime(source.getLastModificationTime()+juce::RelativeTime::seconds(2));if(AnalysisStore::exists(source))return 1284;auto changed=p.readAudio(source);if(!changed||changed->analysisCacheHit)return 1285;if(p.readAudio(source,[]{return true;}))return 1286;AnalysisStore::fileFor(source).deleteFile();LoopLoader loader(p);loader.busy=true;FolderAnalyser analyser(p,loader);{LibraryPreparation::Foreground foreground;analyser.request({source});juce::Thread::sleep(100);if(AnalysisStore::exists(source))return 1287;}loader.busy=false;bool ready=false;for(int i=0;i<300;++i){if(AnalysisStore::exists(source)){ready=true;break;}juce::Thread::sleep(10);}if(!ready)return 1288;std::cout<<"Persistent folder analysis, waveform/transient/BPM recall, invalidation, cancellation and foreground priority passed\n";return 0;}
 
 int runSliceContinuityChecks(){Processor p(false),reference(false);auto audio=std::make_shared<AudioData>();audio->rate=48000;audio->buffer.setSize(1,96000);for(int n=0;n<96000;++n)audio->buffer.setSample(0,n,.2f+.1f*std::sin(n*.08));for(auto* engine:{&p,&reference}){engine->audio=audio;engine->sourceBpm=120;engine->split(16);engine->setPlayMode(true);engine->prepareToPlay(48000,256);}CheckPlayHead host;host.position.setBpm(120);host.position.setIsPlaying(true);p.setPlayHead(&host);reference.setPlayHead(&host);juce::AudioBuffer<float> a(2,256),b(2,256);std::atomic<bool> held{false},release{false};std::thread ui;float difference=0;for(int block=0;block<900;++block){if(block==390){ui=std::thread([&]{const juce::ScopedLock lock(p.lock);held=true;while(!release)juce::Thread::sleep(1);});while(!held)juce::Thread::sleep(1);}if(block==460){release=true;ui.join();}host.position.setPpqPosition(block*256.*2/48000);juce::MidiBuffer ma,mb;if(block==420){auto message=juce::MidiMessage::noteOn(1,39,(juce::uint8)100);ma.addEvent(message,90);mb.addEvent(message,90);}p.processBlock(a,ma);reference.processBlock(b,mb);for(int ch=0;ch<2;++ch)for(int n=0;n<256;++n)difference=juce::jmax(difference,std::abs(a.getSample(ch,n)-b.getSample(ch,n)));}if(ui.joinable()){release=true;ui.join();}if(difference>1e-6f)return 1290;reference.clearVoices();std::vector<float> cycle(96000);difference=0;for(int block=0;block<1125;++block){host.position.setPpqPosition(block*256.*2/48000);juce::MidiBuffer empty;reference.processBlock(b,empty);for(int n=0;n<256;++n){int sample=block*256+n;if(sample>=96000&&sample<192000)cycle[sample-96000]=b.getSample(0,n);else if(sample>=192000)difference=juce::jmax(difference,std::abs(cycle[sample-192000]-b.getSample(0,n)));}}if(difference>1e-6f)return 1291;std::cout<<"Slice transport/MIDI rendering remains sample-identical across 70 UI-contended blocks and recovery\n";return 0;}
 
@@ -824,3 +824,25 @@ int runSfzFileCheck(const char* path){Processor p(false);auto data=p.readAudio(j
 #include "Release032Checks.h"
 
 #include "Release033Checks.h"
+
+#include "SaveABChecks.h"
+
+#include "Browser332Checks.h"
+
+#include "ManualRefreshChecks.h"
+
+#include "Save334Checks.h"
+
+#include "Type335Checks.h"
+
+#include "Preparation340Checks.h"
+
+#include "Json341Checks.h"
+
+#include "Database350Checks.h"
+
+#include "Folder351Checks.h"
+
+#include "Anchor352Checks.h"
+
+#include "Stretch360Checks.h"

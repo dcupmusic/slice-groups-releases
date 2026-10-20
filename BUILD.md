@@ -1,4 +1,4 @@
-# Building 0.33.0
+# Building 0.36.3
 
 Use an Apple Silicon Mac with macOS 14+, Xcode command-line tools and CMake 3.22+. Download and unzip the full Source release asset, which includes the dependency sources, matching headers, model weights and prebuilt Apple Silicon libraries. The small GitHub checkout alone omits these large dependencies.
 
