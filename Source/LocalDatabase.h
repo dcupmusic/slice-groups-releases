@@ -93,6 +93,16 @@ public:
    exclusive.exit();return true;
   }catch(...){exclusive.exit();throw;}
  }
+ // Import only new destination-path records. A single transaction prevents a
+ // copied folder becoming half tagged; content-hash aliases are intentionally untouched.
+ void importCopiedMetadata(const std::map<juce::String,juce::var>& layers){
+  std::vector<std::shared_ptr<std::mutex>> namespaces;{std::lock_guard<std::mutex> guard(cacheMutex);for(auto& layer:layers){auto& ptr=namespaceLocks[layer.first];if(!ptr)ptr=std::make_shared<std::mutex>();namespaces.push_back(ptr);}}
+  std::vector<std::unique_lock<std::mutex>> namespaceGuards;for(auto& ns:namespaces)namespaceGuards.emplace_back(*ns);
+  std::vector<std::unique_ptr<juce::InterProcessLock>> processLocks;struct Release{std::vector<std::unique_ptr<juce::InterProcessLock>>& locks;~Release(){for(auto& lock:locks)lock->exit();}} release{processLocks};for(auto& layer:layers){auto lock=std::make_unique<juce::InterProcessLock>("SliceGroupsDatabaseMetadata-"+juce::String((folder.getFullPathName()+layer.first).hashCode64()));if(!lock->enter(1000))throw std::runtime_error("The library is busy. Try copying again shortly.");processLocks.push_back(std::move(lock));}
+  std::lock_guard<std::mutex> guard(writeMutex);Connection c(file);c.exec("BEGIN IMMEDIATE");
+  try{for(auto& layer:layers){auto* values=layer.second.getDynamicObject();if(!values||values->getProperties().isEmpty())continue;for(auto& item:values->getProperties())if(layer.first=="loops.json")putLoop(c,item.name.toString(),item.value.toString());else putMetadata(c,layer.first,item.name.toString(),item.value);bump(c,layer.first);}c.exec("COMMIT");}catch(...){c.exec("ROLLBACK");throw;}
+  for(auto& layer:layers)invalidate(layer.first);
+ }
  bool saveLoop(juce::String path,juce::String hash,juce::String xml){std::lock_guard<std::mutex> guard(writeMutex);Connection c(file);c.exec("BEGIN IMMEDIATE");try{putLoop(c,path,xml);if(hash.isNotEmpty())putLoop(c,"sha256:"+hash,xml);bump(c,"loops.json");c.exec("COMMIT");}catch(...){c.exec("ROLLBACK");throw;}invalidate("loops.json");return true;}
  juce::String loop(juce::String identity){Connection c(file,false);Statement s(c.db,"SELECT xml FROM loops WHERE identity=?");s.bind(1,identity);return s.row()?s.text(0):juce::String();}
  juce::var savedKeys(){auto value=empty();Connection c(file,false);Statement s(c.db,"SELECT identity,musical_key FROM loops WHERE identity LIKE '/%'");while(s.row())value.getDynamicObject()->setProperty(s.text(0),(int)s.number(1));return value;}

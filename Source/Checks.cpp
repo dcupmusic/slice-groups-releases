@@ -1,3 +1,5 @@
+int runFeatures380();
+int runUpdateLive380();
 int runFeatures370();
 int runSharing370Args(const char*,const char*);
 int runStretch360Checks();
@@ -90,6 +92,9 @@ int runSliceGroupsLibraryRhythmChecks();
 int runSliceGroupsTransportChecks();
 int runSliceGroupsGuiCheck(const char*);
 int main(int argc,char** argv) {
+    setenv("SLICE_GROUPS_DISABLE_UPDATES","1",1);
+    if(argc==2&&std::string(argv[1])=="--features380-check")return runFeatures380();
+    if(argc==2&&std::string(argv[1])=="--update-live380-check")return runUpdateLive380();
     if (!std::getenv("SLICE_GROUPS_LIBRARY")) setenv("SLICE_GROUPS_LIBRARY",(std::filesystem::current_path()/"work/test-library").c_str(),1);
     if (argc == 3 && std::string(argv[1]) == "--snapshot"){int result=runSliceGroupsGuiCheck(argv[2]);if(!result)result=runRackGuiCheck(argv[2]);if(result)std::cerr<<"GUI check failed ("<<result<<")\n";return result;}
     if(argc==3&&std::string(argv[1])=="--load-benchmark")return runLoadBenchmark(argv[2]);
