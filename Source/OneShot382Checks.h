@@ -1,0 +1,23 @@
+#pragma once
+int runOneShot382(){
+ juce::ScopedJuceInitialiser_GUI gui;
+ auto require=[](bool pass,const char* text){if(!pass){std::cerr<<"FAIL: "<<text<<"\n";throw std::runtime_error(text);}};
+ try{
+ // A period-locked blend must retain a clean single-cycle oscillator's frequency.
+ juce::AudioBuffer<float> tone(1,4096);for(int i=0;i<tone.getNumSamples();++i)tone.setSample(0,i,.6f*std::sin(2*juce::MathConstants<double>::pi*i/128));
+ for(double fade:{0.,1.,16.,64.,128.,256.}){double error=0;for(int i=0;i<128;++i){double value=OneShotLoop::read(tone,0,1024+i,1024,1152,fade);error=juce::jmax(error,std::abs(value-tone.getSample(0,1024+i)));}require(error<1e-5,"crossfade must preserve a single-cycle oscillator");}
+ // Wider fades genuinely include neighbouring source audio; period and seam stay fixed.
+ juce::AudioBuffer<float> context(1,4096);for(int i=0;i<4096;++i)context.setSample(0,i,(float)(.1+.0001*i+.2*std::sin(i*.043)));
+ double diff=0;for(int i=0;i<128;++i)diff+=std::abs(OneShotLoop::read(context,0,1024+i,1024,1152,256)-context.getSample(0,1024+i));require(diff>1,"surrounding audio must affect timbre");
+ for(double fade:{8.,64.,256.}){auto left=OneShotLoop::read(context,0,1152-1e-5,1024,1152,fade),right=OneShotLoop::read(context,0,1024,1024,1152,fade);require(std::abs(left-right)<1e-5,"continuous crossfade seam");for(int i=0;i<128;++i)require(std::abs(OneShotLoop::read(context,0,1024+i,1024,1152,fade)-OneShotLoop::read(context,0,1152+i,1024,1152,fade))<1e-6,"fixed period");}
+ for(int length:{1,2,128}){double pos=0;int direction=1;bool reverse=false;for(int i=0;i<1024;++i){OneShotLoop::normalise(pos,direction,0,length,true);require(pos>=0&&pos<length,"ping-pong bounds");reverse|=direction<0;pos+=direction*3.7;}require(length==1||reverse,"ping-pong reverses");}
+ auto root=LibraryStore::root().getChildFile("One shots");root.createDirectory();auto first=root.getChildFile("Tone C3.wav"),second=root.getChildFile("Second D3.wav"),other=LibraryStore::root().getChildFile("Loop.wav");require(writeRenderedAudio(first,tone,48000)&&writeRenderedAudio(second,context,48000)&&writeRenderedAudio(other,tone,48000),"fixtures");LibraryStore::setPlaybackType({root},1);
+ Processor p(false);p.autoSave=false;p.load(first);p.setPlaybackMode(3);p.shotStart=100;p.shotEnd=3000;p.shotLoopStart=1024;p.shotLoopEnd=1152;p.shotLoop=true;p.shotPingPong=true;p.shotGainDb=-6;p.shotCrossfadeMs=4;p.shotEnvelope={0,.1f,1,.05f};require(p.saveLoop(),"save one shot");
+ auto bulk=Processor::bulkShotOctave({first,second,other},-2);require(bulk.first==2&&bulk.second==0,"bulk octave selection");Processor loaded(false);loaded.load(first);require(loaded.shotOctaveShift==-2&&loaded.shotStart==100&&loaded.shotLoopStart==1024&&loaded.shotGainDb==-6&&loaded.shotPingPong,"bulk preserves other settings");loaded.load(second);require(loaded.shotOctaveShift==-2&&loaded.oneShotMode,"unsaved one-shot octave persists");require(LibraryStore::database()->loop(other.getFullPathName()).isEmpty(),"non-one-shot skipped");
+ // Render the actual engine and compare gain, direction and crossfade, not only helpers.
+ auto render=[&](double gain,bool ping,double crossfade){p.clearVoices();p.oneShotMode=true;p.shotStart=1024;p.shotEnd=3000;p.shotLoop=true;p.shotLoopStart=1024;p.shotLoopEnd=1152;p.shotCrossfadeMs=crossfade;p.shotOctaveShift=0;p.shotGainDb=gain;p.shotPingPong=ping;p.shotFilterFade=0;p.normaliseEnabled=false;p.prepareToPlay(48000,128);p.triggerShot(60,1);juce::AudioBuffer<float> out(2,4096);out.clear();juce::MidiBuffer midi;p.renderShots(out,midi);return out;};
+ auto dry=render(0,false,0),quiet=render(-6,false,0),blur=render(0,false,4),ping=render(0,true,4);double energy=0,difference=0;for(int i=1024;i<4096;++i){require(std::isfinite(ping.getSample(0,i)),"finite ping-pong render");energy+=dry.getSample(0,i)*dry.getSample(0,i);difference+=std::pow(quiet.getSample(0,i)-dry.getSample(0,i)*std::pow(10.,-.3),2);require(std::abs(dry.getSample(0,i)-blur.getSample(0,i))<1e-4,"rendered crossfade retains oscillator");}require(energy>1&&difference/energy<1e-8,"rendered gain field");
+ Editor editor(p);editor.diagnosticQuietAnalysis();require(editor.shot382UiForCheck(),"one-shot controls and numeric commit");auto image=editor.createComponentSnapshot(editor.getLocalBounds());auto out=LibraryStore::root().getChildFile("one-shot382.png").createOutputStream();juce::PNGImageFormat png;if(out)png.writeImageToStream(image,*out);
+ std::cout<<"One-shot gain/persistence, bulk octave preserving edits, fixed-period surrounding crossfade, ping-pong bounds and actual engine/UI passed.\n";return 0;
+ }catch(const std::exception& e){return 3821;}
+}

@@ -30,9 +30,11 @@ int runRackChecks(){
     midi.clear();midi.addEvent(juce::MidiMessage::noteOn(1,36,(juce::uint8)127),0);pads.processBlock(out,midi);for(int bus=0;bus<9;++bus)if((bus==3&&out.getRMSLevel(bus*2,0,256)<.01)||(bus!=3&&out.getRMSLevel(bus*2,0,256)>1e-7))return 1460;
     pad.clearVoices();midi.addEvent(juce::MidiMessage::noteOn(1,37,(juce::uint8)127),0);pads.processBlock(out,midi);if(out.getRMSLevel(10,180,76)<.01||out.getRMSLevel(6,180,76)>1e-7)return 1461;
     auto padState=pads.stateXml();RackProcessor recalled;if(!recalled.restore(*padState,true)||recalled.loops[0]->padOutput[39]!=4)return 1462;auto loopConfig=pad.configurationXml(false);pad.setPadOutput(39,7);pad.applyConfiguration(*loopConfig,false);if(pad.padOutput[39]!=7)return 1463;
-    // Manual slices choke automatic and manual voices, and sequenced playback takes over again.
-    pad.clearVoices();pad.startVoice(pad.slices[0],1,true);pad.startVoice(pad.slices[1],1,false);int active=0;for(auto& v:pad.voices)if(v.active){++active;if(v.automatic)return 1464;}if(active!=1)return 1465;pad.startVoice(pad.slices[0],1,false);active=0;for(auto& v:pad.voices)active+=v.active;if(active!=1)return 1466;pad.startVoice(pad.slices[1],1,true);active=0;for(auto& v:pad.voices)if(v.active){++active;if(!v.automatic)return 1467;}if(active!=1)return 1468;
-    std::cout<<"Pad routing isolation, recall, browsing persistence and monophonic slice takeover passed\n";
+    // Different pad/category choke groups overlap; only the same category retires.
+    pad.clearVoices();pad.startVoice(pad.slices[0],1,true);pad.startVoice(pad.slices[1],1,false);int active=0,automatic=0;for(auto& v:pad.voices)if(v.active){++active;automatic+=v.automatic;}if(active!=2||automatic!=1)return 1464;
+    pad.startVoice(pad.slices[0],1,false);active=automatic=0;for(auto& v:pad.voices)if(v.active){++active;automatic+=v.automatic;}if(active!=2||automatic!=0)return 1465;
+    pad.startVoice(pad.slices[1],1,true);active=automatic=0;for(auto& v:pad.voices)if(v.active){++active;automatic+=v.automatic;}if(active!=2||automatic!=1)return 1466;
+    std::cout<<"Pad routing isolation, recall, browsing persistence and per-category slice choking passed\n";
     auto nested=folder.getChildFile("Nested/Deeper");nested.createDirectory();folder.getChildFile(".Hidden").createDirectory();folder.getChildFile(".Hidden/ignore.wav").replaceWithText("hidden");nested.getChildFile("nested.wav").replaceWithText("names-only");nested.getChildFile("ignore.txt").replaceWithText("ignore");auto index=BrowserSearchIndex::enumerate(folder);if(index.size()!=9||!index.contains(nested.getChildFile("nested.wav"))||index.contains(folder.getChildFile(".Hidden/ignore.wav")))return 1313;
     std::cout<<"Eight engines: channel isolation, separate stereo outs, mute/solo, full project/preset recall, output fallback, oversized MIDI offsets and recursive index passed\n";return 0;
 }

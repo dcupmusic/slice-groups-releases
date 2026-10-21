@@ -27,3 +27,9 @@ The resulting copy belongs to your local library and can be tagged, edited and s
 Slice Groups checks the public GitHub release feed in the background when opened (at most once every six hours per host session). The version button changes to **UPDATE** when a newer stable release is available. Click it to download the matching Apple Silicon package, or use **Settings → Check for updates**. If the package is unavailable, it opens the release page. No account or library information is sent.
 
 Close your audio host before installing the download. The plug-in does not replace itself while loaded. Update checks require an internet connection; failed checks do not affect playback.
+
+## Relocating a library (0.38.6+)
+
+Move the entire library folder in Finder, including its hidden `.slicegroups` folder when sharing is enabled. In Slice Groups, right-click its original library entry and choose **Relocate Library...**, then select the folder at its new location. Missing registered folders remain available for relinking. The same command is available under **Settings → Relocate Library...**.
+
+This command updates references; it does not move or copy audio. Tags, favourites, playback types, keys, folder colours and saved sample/track settings move together in a database transaction. Conflicting destination metadata is rejected without a partial update. Existing loaded samples can still save through their old paths, and old project file references are redirected locally. A collaborator's library remains read-only and its owner snapshot is not modified. Search catalogues for affected roots rebuild in the background; relocation does not request whole-library audio preparation.

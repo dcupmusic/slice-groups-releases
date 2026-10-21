@@ -1,3 +1,10 @@
+int runFeatures387();
+int runRelocate386();
+int runOutput385();
+int runRelease384();
+int runTravel383();
+int runOneShot382();
+int runFolderSearch381();
 int runFeatures380();
 int runUpdateLive380();
 int runFeatures370();
@@ -93,6 +100,14 @@ int runSliceGroupsTransportChecks();
 int runSliceGroupsGuiCheck(const char*);
 int main(int argc,char** argv) {
     setenv("SLICE_GROUPS_DISABLE_UPDATES","1",1);
+    if(argc==2&&std::string(argv[1])=="--features387-check")return runFeatures387();
+    if(argc==2&&std::string(argv[1])=="--relocate386-check")return runRelocate386();
+    if(argc==2&&std::string(argv[1])=="--output385-check")return runOutput385();
+    if(argc==2&&std::string(argv[1])=="--rack385-check")return runRackChecks();
+    if(argc==2&&std::string(argv[1])=="--release384-check")return runRelease384();
+    if(argc==2&&std::string(argv[1])=="--travel383-check")return runTravel383();
+    if(argc==2&&std::string(argv[1])=="--one-shot382-check")return runOneShot382();
+    if(argc==2&&std::string(argv[1])=="--folder-search381-check")return runFolderSearch381();
     if(argc==2&&std::string(argv[1])=="--features380-check")return runFeatures380();
     if(argc==2&&std::string(argv[1])=="--update-live380-check")return runUpdateLive380();
     if (!std::getenv("SLICE_GROUPS_LIBRARY")) setenv("SLICE_GROUPS_LIBRARY",(std::filesystem::current_path()/"work/test-library").c_str(),1);

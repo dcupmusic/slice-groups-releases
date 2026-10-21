@@ -73,20 +73,21 @@ public:
         bool ok = temporary.getFile().replaceWithText(juce::JSON::toString(value)) && temporary.overwriteTargetFileWithTemporary();
         if(ok){localRevision(name,true);metadataChanged(name);}lock.exit();if(ok&&sharedKind(name))queueShared(name,before,value);return ok;
     }
+    static juce::File resolveFile(juce::File file){return juce::File(database()->resolvePath(file.getFullPathName()));}
     static juce::File browserRoot(){return root().getChildFile("Library");}
     static juce::Array<juce::File> libraryRoots(){juce::Array<juce::File> roots;auto data=read("library-roots.json");for(auto& item:data.getDynamicObject()->getProperties())if((bool)item.value)roots.add(juce::File(item.name.toString()));return roots;}
     static bool addLibraryRoot(juce::File folder){if(!folder.isDirectory())return false;return update("library-roots.json",[&](juce::DynamicObject& o){o.setProperty(folder.getFullPathName(),true);});}
     static void removeLibraryRoot(juce::File folder){update("library-roots.json",[&](juce::DynamicObject& o){o.removeProperty(folder.getFullPathName());});}
     static bool inLibrary(juce::File file){for(auto root:libraryRoots())if(file==root||file.isAChildOf(root))return true;return false;}
-    static bool hasPlaybackType(juce::File file){auto data=read("playback-types.json");auto current=file;while(current!=juce::File()){if(data.getDynamicObject()->hasProperty(current.getFullPathName()))return true;auto parent=current.getParentDirectory();if(parent==current)break;current=parent;}return false;}
-    static int playbackType(juce::File file){if(file.hasFileExtension("sfz"))return 1;auto data=read("playback-types.json");auto* object=data.getDynamicObject();auto current=file;while(current!=juce::File()){if(object->hasProperty(current.getFullPathName()))return (int)object->getProperty(current.getFullPathName());auto parent=current.getParentDirectory();if(parent==current)break;current=parent;}return 0;}
+    static bool hasPlaybackType(juce::File file){file=resolveFile(file);auto data=read("playback-types.json");auto current=file;while(current!=juce::File()){if(data.getDynamicObject()->hasProperty(current.getFullPathName()))return true;auto parent=current.getParentDirectory();if(parent==current)break;current=parent;}return false;}
+    static int playbackType(juce::File file){file=resolveFile(file);if(file.hasFileExtension("sfz"))return 1;auto data=read("playback-types.json");auto* object=data.getDynamicObject();auto current=file;while(current!=juce::File()){if(object->hasProperty(current.getFullPathName()))return (int)object->getProperty(current.getFullPathName());auto parent=current.getParentDirectory();if(parent==current)break;current=parent;}return 0;}
     static int typeFromValues(juce::File file,const juce::var& data){if(file.hasFileExtension("sfz"))return 1;auto* object=data.getDynamicObject();for(auto current=file;object&&current!=juce::File();){if(object->hasProperty(current.getFullPathName()))return juce::jlimit(0,5,(int)object->getProperty(current.getFullPathName()));auto parent=current.getParentDirectory();if(parent==current)break;current=parent;}return 0;}
     static juce::String typeName(int type){static const char* names[]{"Slice","One Shot","Track","Slice","Stretch","Warp"};return names[juce::jlimit(0,5,type)];}
     static int modeForType(int type){return type==1?3:type==2?4:type==4?1:type==5?2:0;}
     static bool matchesType(int type,int filter){return filter<0||type==filter||(filter==3&&type==0)||(filter==0&&type>=3);}
     static void setPlaybackType(const juce::Array<juce::File>& targets,int type){
         juce::Array<juce::File> folders;
-        if(type>=0)for(auto file:targets)if(file.isDirectory())folders.add(file);
+        if(type>=0)for(auto file:targets){file=resolveFile(file);if(file.isDirectory())folders.add(file);}
         update("playback-types.json",[&](juce::DynamicObject& o){
             // A folder assignment applies to its contents, including old file overrides.
             // Work from stored keys rather than walking the sample collection.
@@ -94,7 +95,7 @@ public:
             for(auto& property:o.getProperties())for(auto folder:folders)
                 if(juce::File(property.name.toString()).isAChildOf(folder)){removed.add(property.name);break;}
             for(auto key:removed)o.removeProperty(key);
-            for(auto file:targets){if(type<0)o.removeProperty(file.getFullPathName());else o.setProperty(file.getFullPathName(),type);}
+            for(auto file:targets){file=resolveFile(file);if(type<0)o.removeProperty(file.getFullPathName());else o.setProperty(file.getFullPathName(),type);}
         });
     }
     static juce::String tagsFor(const juce::var& tags,const juce::File& file) {
@@ -104,7 +105,7 @@ public:
         juce::StringArray incoming;incoming.addTokens(text,",","");incoming.trim();incoming.removeEmptyStrings();incoming.removeDuplicates(true);
         if (incoming.isEmpty()) return false;
         return update("tags.json",[&](juce::DynamicObject& object) {
-            for (auto file : targets) {
+            for (auto file : targets) {file=resolveFile(file);
                 juce::StringArray values;values.addTokens(object.getProperty(file.getFullPathName()).toString(),",","");
                 values.trim();values.removeEmptyStrings();values.removeDuplicates(true);
                 for (auto tag : incoming) if (!values.contains(tag,true)) values.add(tag);
@@ -112,8 +113,8 @@ public:
             }
         });
     }
-    static bool removeTags(const juce::Array<juce::File>& targets,const juce::String& text={},bool all=false){juce::StringArray remove;remove.addTokens(text,",","");remove.trim();remove.removeEmptyStrings();if(targets.isEmpty()||(!all&&remove.isEmpty()))return false;return update("tags.json",[&](juce::DynamicObject& object){for(auto file:targets){auto key=file.getFullPathName();if(all){object.removeProperty(key);continue;}juce::StringArray values;values.addTokens(object.getProperty(key).toString(),",","");values.trim();values.removeEmptyStrings();for(int i=values.size();--i>=0;)if(remove.contains(values[i],true))values.remove(i);if(values.isEmpty())object.removeProperty(key);else object.setProperty(key,values.joinIntoString(", "));}});}
-    static bool setFavourite(juce::File folder,juce::String name){return update("favourites.json",[&](juce::DynamicObject& o){if(name.isEmpty())o.removeProperty(folder.getFullPathName());else o.setProperty(folder.getFullPathName(),name);});}
+    static bool removeTags(const juce::Array<juce::File>& targets,const juce::String& text={},bool all=false){juce::StringArray remove;remove.addTokens(text,",","");remove.trim();remove.removeEmptyStrings();if(targets.isEmpty()||(!all&&remove.isEmpty()))return false;return update("tags.json",[&](juce::DynamicObject& object){for(auto file:targets){file=resolveFile(file);auto key=file.getFullPathName();if(all){object.removeProperty(key);continue;}juce::StringArray values;values.addTokens(object.getProperty(key).toString(),",","");values.trim();values.removeEmptyStrings();for(int i=values.size();--i>=0;)if(remove.contains(values[i],true))values.remove(i);if(values.isEmpty())object.removeProperty(key);else object.setProperty(key,values.joinIntoString(", "));}});}
+    static bool setFavourite(juce::File folder,juce::String name){folder=resolveFile(folder);return update("favourites.json",[&](juce::DynamicObject& o){if(name.isEmpty())o.removeProperty(folder.getFullPathName());else o.setProperty(folder.getFullPathName(),name);});}
     struct Tag { juce::String name;int count = 0; };
     static std::vector<Tag> rankedTags(const juce::var& value,juce::String prefix = {}) {
         std::map<juce::String,Tag> counts;
@@ -127,11 +128,11 @@ public:
             return a.count != b.count ? a.count > b.count : a.name.compareIgnoreCase(b.name) < 0;
         });return result;
     }
-    static juce::String fingerprint(const juce::File& file){auto stream=file.createInputStream();return stream?juce::SHA256(*stream).toHexString():juce::String();}
-    static int fileKey(const juce::File& file,juce::String hash={}){auto keys=read("keys.json");auto* object=keys.getDynamicObject();auto path=file.getFullPathName();if(object->hasProperty(path))return juce::jlimit(-1,11,(int)object->getProperty(path));if(hash.isNotEmpty()&&object->hasProperty("sha256:"+hash))return juce::jlimit(-1,11,(int)object->getProperty("sha256:"+hash));return -2;}
-    static bool setFileKey(const juce::File& file,int key,juce::String hash={}){if(hash.isEmpty())hash=fingerprint(file);key=juce::jlimit(-1,11,key);return update("keys.json",[&](juce::DynamicObject& object){object.setProperty(file.getFullPathName(),key);if(hash.isNotEmpty())object.setProperty("sha256:"+hash,key);});}
+    static juce::String fingerprint(const juce::File& input){auto file=resolveFile(input);auto stream=file.createInputStream();return stream?juce::SHA256(*stream).toHexString():juce::String();}
+    static int fileKey(const juce::File& input,juce::String hash={}){auto file=resolveFile(input);auto keys=read("keys.json");auto* object=keys.getDynamicObject();auto path=file.getFullPathName();if(object->hasProperty(path))return juce::jlimit(-1,11,(int)object->getProperty(path));if(hash.isNotEmpty()&&object->hasProperty("sha256:"+hash))return juce::jlimit(-1,11,(int)object->getProperty("sha256:"+hash));return -2;}
+    static bool setFileKey(const juce::File& input,int key,juce::String hash={}){auto file=resolveFile(input);if(hash.isEmpty())hash=fingerprint(file);key=juce::jlimit(-1,11,key);return update("keys.json",[&](juce::DynamicObject& object){object.setProperty(file.getFullPathName(),key);if(hash.isNotEmpty())object.setProperty("sha256:"+hash,key);});}
     static juce::File loopConfigFile(juce::String identity){return root().getChildFile("loop-configs-v2").getChildFile(juce::SHA256(identity.toRawUTF8(),identity.getNumBytesAsUTF8()).toHexString()+".xml");}
-    static bool saveLoop(const juce::File& file,const juce::String& xml,juce::String hash={}){
+    static bool saveLoop(const juce::File& input,const juce::String& xml,juce::String hash={}){auto file=resolveFile(input);
         if(!editable(file)){storageError()="Shared library is read-only";return false;}if(hash.isEmpty())hash=fingerprint(file);auto config=juce::parseXML(xml);if(!config)return false;config->removeAttribute("normalise");config->removeAttribute("normaliseLufs");config->removeAttribute("targetLufs");if(hash.isNotEmpty())config->setAttribute("contentHash",hash);auto value=config->toString();if(usingDatabase){try{bool ok=database()->saveLoop(file.getFullPathName(),hash,value);if(ok){database()->poll(true);pollDatabase();notifySharing();}return ok;}catch(const std::exception& e){storageError()=e.what();return false;}}if(diagnosticOldSave)return update("loops.json",[&](juce::DynamicObject& o){o.setProperty(file.getFullPathName(),value);if(hash.isNotEmpty())o.setProperty("sha256:"+hash,value);});
         const juce::ScopedLock guard(updateLock());juce::InterProcessLock fileLock("SliceGroupsLoop-"+juce::String(file.getFullPathName().hashCode64()));if(!fileLock.enter(1000))return false;
         auto persist=[&](juce::String key){auto target=loopConfigFile(key);if(!target.getParentDirectory().createDirectory())return false;juce::TemporaryFile temporary(target);return temporary.getFile().replaceWithText(value)&&temporary.overwriteTargetFileWithTemporary();};
@@ -139,7 +140,7 @@ public:
         ok=update("loop-index-v2.json",[&](juce::DynamicObject& o){o.setProperty(file.getFullPathName(),config->getIntAttribute("loopKey",-1));});
         if(ok){juce::var before(new juce::DynamicObject()),after(new juce::DynamicObject());after.getDynamicObject()->setProperty(file.getFullPathName(),value);queueShared("loops.json",before,after);}return ok;
     }
-    static std::unique_ptr<juce::XmlElement> savedLoop(const juce::File& file,juce::String hash={}) {
+    static std::unique_ptr<juce::XmlElement> savedLoop(const juce::File& input,juce::String hash={}) {auto file=resolveFile(input);
         if(hash.isEmpty())hash=fingerprint(file);
         if(usingDatabase){if(!editable(file)){auto shared=sharedSnapshot("loops.json");if(auto* object=shared.getDynamicObject())if(auto config=juce::parseXML(object->getProperty(file.getFullPathName()).toString()))if(hash.isEmpty()||config->getStringAttribute("contentHash").isEmpty()||config->getStringAttribute("contentHash")==hash)return config;return {};}try{for(auto identity:{file.getFullPathName(),"sha256:"+hash})if(auto config=juce::parseXML(database()->loop(identity)))if(hash.isEmpty()||config->getStringAttribute("contentHash").isEmpty()||config->getStringAttribute("contentHash")==hash)return config;}catch(const std::exception& e){storageError()=e.what();}return {};}
         if(diagnosticOldSave){
@@ -247,7 +248,7 @@ public:
 };
 #include "OwnedSharing.h"
 inline void LibraryStore::notifySharing(){OwnedLibrarySharing::instance().refresh();}
-inline bool LibraryStore::editable(juce::File file){return OwnedLibrarySharing::instance().editable(file);}
+inline bool LibraryStore::editable(juce::File file){return OwnedLibrarySharing::instance().editable(resolveFile(file));}
 inline void LibraryStore::mergeShared(const juce::String& name,juce::var& value){if(usingDatabase){auto merged=OwnedLibrarySharing::instance().snapshot(name);if(merged.isObject())value=merged;}else if(diagnosticSharing)SharedLibraryMetadata::instance().merge(name,value);}
 inline void LibraryStore::queueShared(const juce::String& name,const juce::var& before,const juce::var& after){if(!usingDatabase&&diagnosticSharing)SharedLibraryMetadata::instance().enqueue(name,before,after);}
 
