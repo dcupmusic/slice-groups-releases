@@ -8,7 +8,7 @@ A macOS VST3 instrument for slicing loops, playing one-shots and working with tr
 
 Requires an **Apple Silicon Mac running macOS 14 or later**.
 
-1. Download the **AppleSilicon.dmg** release asset and open it.
+1. Download **AppleSilicon-Installer.zip** and unzip it (or open the **AppleSilicon.dmg** if that version offers a disk image).
 2. Close Ableton or your other audio host.
 3. Open **Install Slice Groups.app**, confirm the host is closed, then click **Install**.
 4. Reopen the host and rescan VST3 plugins if needed. Add your sample folders inside Slice Groups.
