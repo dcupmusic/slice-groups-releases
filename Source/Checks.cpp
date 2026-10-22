@@ -1,3 +1,8 @@
+int runSwing402();
+int runVoice401();
+int runSequence400();
+int runMulti390();
+int runMove388();
 int runFeatures387();
 int runRelocate386();
 int runOutput385();
@@ -100,6 +105,11 @@ int runSliceGroupsTransportChecks();
 int runSliceGroupsGuiCheck(const char*);
 int main(int argc,char** argv) {
     setenv("SLICE_GROUPS_DISABLE_UPDATES","1",1);
+    if(argc==2&&std::string(argv[1])=="--swing402-check")return runSwing402();
+    if(argc==2&&std::string(argv[1])=="--voice401-check")return runVoice401();
+    if(argc==2&&std::string(argv[1])=="--sequence400-check")return runSequence400();
+    if(argc==2&&std::string(argv[1])=="--multi390-check")return runMulti390();
+    if(argc==2&&std::string(argv[1])=="--move388-check")return runMove388();
     if(argc==2&&std::string(argv[1])=="--features387-check")return runFeatures387();
     if(argc==2&&std::string(argv[1])=="--relocate386-check")return runRelocate386();
     if(argc==2&&std::string(argv[1])=="--output385-check")return runOutput385();

@@ -861,3 +861,13 @@ int runSfzFileCheck(const char* path){Processor p(false);auto data=p.readAudio(j
 #include "Relocate386Checks.h"
 
 #include "Features387Checks.h"
+
+#include "Move388Checks.h"
+
+#include "Multi390Checks.h"
+
+#include "Sequence400Checks.h"
+
+#include "Voice401Checks.h"
+
+#include "Swing402Checks.h"

@@ -1,6 +1,6 @@
 # Slice Groups
 
-A macOS VST3 instrument for slicing loops, playing one-shots and working with tracks and separated stems.
+A macOS VST3 instrument for slicing loops, playing one-shots and multisamples, sequencing MIDI, and working with tracks and separated stems.
 
 **[Download the latest version](https://github.com/dcupmusic/slice-groups-releases/releases/latest)**
 
@@ -24,3 +24,12 @@ The stem models and runtime are bundled. No Python installation is needed. Windo
 The application source is readable in this repository. For a self-contained build, download the **Source.zip release asset**, which includes dependencies and model weights; GitHub’s automatically generated source download contains the small repository only. See BUILD.md and THIRD_PARTY.md.
 
 Slice Groups source is licensed under **AGPLv3-or-later**. Dependencies retain their own licenses.
+
+## New in 0.40.2
+
+- DAW-synced piano roll for slice patterns, one-shots and Multi instruments: MIDI recording, import, Save/Save As, pencil drawing, editable velocity, absolute snapping and waveform-style zoom.
+- Master key with separate root-note selector and MIN/MAJ toggle. Sequencer swing shares Slice mode’s A–D swing groups.
+- MIDI files appear in the library with detected/stored key and support tags. Save overwrites the loaded MIDI file; Save As reveals the new file in Finder.
+- Multi mode: compact split mapping editor, filename root mapping and fallback pitch detection, key/velocity ranges, linked crossovers, per-sample trim and looping, mono/poly and legato.
+- Bulk one-shot Mono/Poly editing; Legato is hidden in Poly.
+- Dragging files or folders between library folders moves audio and metadata.
