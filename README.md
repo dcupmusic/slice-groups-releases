@@ -43,6 +43,13 @@ Slice Groups source is licensed under **AGPLv3-or-later**. Dependencies retain t
 - Destination folders highlight while dragging files/folders.
 - Fresh Slice files default to both grid and slice snapping off; saved snapping settings are retained.
 
+
+## New in 0.40.8
+
+- Enhanced transient detection with frequency-band analysis, improved bass rejection, attack positioning and duplicate suppression. Compare Enhanced and Classic in Settings.
+- Native macOS file drags now highlight the destination folder and move files with metadata.
+- A clearly labelled yellow UPDATE AVAILABLE button opens the latest published download.
+
 ## New in 0.40.3
 
 - Sequencer Swing is a rotary knob. Sixteenth-note tick lines remain visible at every zoom level; labels adapt to available space.

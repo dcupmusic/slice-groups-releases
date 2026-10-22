@@ -16,6 +16,7 @@
 #include <map>
 #include "PitchDetection.h"
 #include "Sequence.h"
+#include "TransientDetector.h"
 
 class AudioExportWorker;class FileTrashWorker;
 struct Envelope { bool enabled=false;double attack=0,hold=0,decay=150; };
@@ -24,7 +25,7 @@ struct AudioData;
 struct SfzRegion {std::shared_ptr<const AudioData> source;int low=0,high=127,lovel=0,hivel=127,root=60,start=0,end=-1,loopStart=0,loopEnd=-1,loopMode=0;double tune=0,gain=1,pan=0,crossfadeMs=0,pitchConfidence=0;bool pingPong=false,zeroSnap=false;juce::String pitchMethod;};
 struct AudioData {
     std::vector<SfzRegion> sfzRegions;juce::String sfzWarning;juce::ADSR::Parameters sfzEnvelope{.005f,.1f,.8f,.15f};
-    juce::AudioBuffer<float> buffer;
+    juce::AudioBuffer<float> buffer;struct OnsetMemo{std::shared_ptr<const TransientAnalysis> data;};mutable std::shared_ptr<OnsetMemo> onsetMemo=std::make_shared<OnsetMemo>();
     SamplePitch detectedPitch;double rate = 44100.0;float peakAmplitude=0;double integratedLufs=-100;
     juce::String path,contentHash;bool analysisCacheHit=false;LoopTiming analysedTiming;double analysedPreferred=0,analysedMeter=0;
     struct TimingMemo { std::mutex mutex;std::map<juce::String,LoopTiming> values; };mutable std::shared_ptr<TimingMemo> timingMemo=std::make_shared<TimingMemo>();
@@ -65,7 +66,7 @@ class Processor final : public juce::AudioProcessor, private juce::Timer {
 public:
     #include "ProcessorSequence.h"
     explicit Processor(bool backgroundServices=true) : AudioProcessor(BusesProperties().withOutput("Output", juce::AudioChannelSet::stereo(), true)) {
-        trackExportSafeCPU=(bool)LibraryStore::read("settings.json").getProperty("trackExportSafeCPU",false);trackExportHQ=(bool)LibraryStore::read("settings.json").getProperty("trackExportHQ",false);trackStemHQ=(bool)LibraryStore::read("settings.json").getProperty("trackStemHQ",false);formats.registerBasicFormats();last.fill(-1);slices.reserve(256);loadPreferences();padNames=defaultNames;syncLinkedSwing();
+        TransientAnalysis::classic=(bool)LibraryStore::read("settings.json").getProperty("classicTransientDetector",false);trackExportSafeCPU=(bool)LibraryStore::read("settings.json").getProperty("trackExportSafeCPU",false);trackExportHQ=(bool)LibraryStore::read("settings.json").getProperty("trackExportHQ",false);trackStemHQ=(bool)LibraryStore::read("settings.json").getProperty("trackStemHQ",false);formats.registerBasicFormats();last.fill(-1);slices.reserve(256);loadPreferences();padNames=defaultNames;syncLinkedSwing();
         if (backgroundServices&&juce::MessageManager::getInstanceWithoutCreating()) startTimer(200);
     }
     std::shared_ptr<AudioExportWorker> folderExportWorker,dragExportWorker;std::shared_ptr<FileTrashWorker> trashWorker;
@@ -349,13 +350,13 @@ public:
         syncLinkedSwing();bool save;
         { const juce::ScopedTryLock g(lock);if (!g.isLocked()) return;save = autoSave && libraryDirty && audio && editDepth==0 && !autoSaveBusy && juce::Time::getMillisecondCounterHiRes()-lastEditTime > 800;if (save) queueAutoSave(); }
     }
-    mutable std::shared_ptr<const AudioData> snapAudio;mutable double snapBpm=0,snapGrid=0;mutable int snapOrigin=0;mutable std::vector<int> snapPoints;
+    mutable std::shared_ptr<const AudioData> snapAudio;mutable bool snapClassic=false;mutable double snapBpm=0,snapGrid=0;mutable int snapOrigin=0;mutable std::vector<int> snapPoints;
     int snapPosition(int position,int mode=-1) const {
         if(mode<0)mode=snapMode;
         if (!audio || mode == 0) return position;
         if (mode == 1) {double anchor=independentGrid?gridOrigin():0;return (int)std::round(anchor+std::round((position-anchor)/audio->rate*sourceBpm/60)*60/sourceBpm*audio->rate);}
         int best = position;double distance = 1e20;
-        if(audio->contentHash.isNotEmpty()){if(snapAudio!=audio||snapBpm!=sourceBpm||snapGrid!=rhythmGrid||snapOrigin!=gridOrigin()){snapPoints=detectedPoints(*audio,0,audio->buffer.getNumSamples(),100,sourceBpm,gridOrigin(),rhythmGrid,{},false);snapAudio=audio;snapBpm=sourceBpm;snapGrid=rhythmGrid;snapOrigin=gridOrigin();}for(int point:snapPoints)if(std::abs(point-position)<distance){best=point;distance=std::abs(point-position);}return best;}
+        if(audio->contentHash.isNotEmpty()){if(snapClassic!=TransientAnalysis::classic.load()||snapAudio!=audio||snapBpm!=sourceBpm||snapGrid!=rhythmGrid||snapOrigin!=gridOrigin()){snapPoints=detectedPoints(*audio,0,audio->buffer.getNumSamples(),100,sourceBpm,gridOrigin(),rhythmGrid,{},false);snapClassic=TransientAnalysis::classic.load();snapAudio=audio;snapBpm=sourceBpm;snapGrid=rhythmGrid;snapOrigin=gridOrigin();}for(int point:snapPoints)if(std::abs(point-position)<distance){best=point;distance=std::abs(point-position);}return best;}
         if(!audio->transients.empty()){for(int point:audio->transients)if(std::abs(point-position)<distance){best=point;distance=std::abs(point-position);}return best;}
         for (const auto& slice : slices) for (int point : {slice.start,slice.end}) if (std::abs(point-position) < distance) { best = point;distance = std::abs(point-position); }
         return best;
@@ -495,7 +496,7 @@ public:
         if (!reader || reader->lengthInSamples <= 0 || reader->lengthInSamples > INT_MAX) return {};
         auto next = std::make_shared<AudioData>();
         next->buffer.setSize((int) reader->numChannels, (int) reader->lengthInSamples);
-        for(int start=0;start<next->buffer.getNumSamples();start+=65536){if(cancel&&cancel())return {};int count=juce::jmin(65536,next->buffer.getNumSamples()-start);if(!reader->read(&next->buffer,start,count,start,true,true))return {};}next->rate=reader->sampleRate;next->path=file.getFullPathName();next->metadata=reader->metadataValues;next->integratedLufs=LoopLoudness::analyse(file,next->buffer,next->rate,cancel);if(cancel&&cancel())return {};if(file.getSize()!=originalSize||file.getLastModificationTime()!=originalModified)return {};if((LibraryStore::playbackType(file)==1||LibraryStore::playbackType(file)==6)&&!LibraryStore::savedLoop(file)&&LibraryStore::fileKey(file)==-2)next->detectedPitch=SamplePitch::cached(file,next->buffer,next->rate,false,cancel);if(AnalysisStore::load(file,*next))return next;if(cancel&&cancel())return {};
+        for(int start=0;start<next->buffer.getNumSamples();start+=65536){if(cancel&&cancel())return {};int count=juce::jmin(65536,next->buffer.getNumSamples()-start);if(!reader->read(&next->buffer,start,count,start,true,true))return {};}next->rate=reader->sampleRate;next->path=file.getFullPathName();next->metadata=reader->metadataValues;next->integratedLufs=LoopLoudness::analyse(file,next->buffer,next->rate,cancel);if(cancel&&cancel())return {};if(file.getSize()!=originalSize||file.getLastModificationTime()!=originalModified)return {};if((LibraryStore::playbackType(file)==1||LibraryStore::playbackType(file)==6)&&!LibraryStore::savedLoop(file)&&LibraryStore::fileKey(file)==-2)next->detectedPitch=SamplePitch::cached(file,next->buffer,next->rate,false,cancel);if(AnalysisStore::load(file,*next)){int type=LibraryStore::playbackType(file);if(type==0||type==3||type==5)next->transients=detectedPoints(*next,0,next->buffer.getNumSamples(),100,120,0,.25,cancel,false);if(cancel&&cancel())return {};return next;}if(cancel&&cancel())return {};
         next->contentHash=LibraryStore::fingerprint(file);next->rate = reader->sampleRate;next->path = file.getFullPathName();next->metadata = reader->metadataValues;
         int length = next->buffer.getNumSamples();
         next->peaks.resize((length + AudioData::peakStride - 1) / AudioData::peakStride);
@@ -503,7 +504,7 @@ public:
             for (int ch = 0; ch < next->buffer.getNumChannels(); ++ch)
                 next->peaks[n / AudioData::peakStride] = juce::jmax(next->peaks[n / AudioData::peakStride], std::abs(next->buffer.getSample(ch,n)));
         if(cancel&&cancel())return {};next->buildWaveformPeaks();if(cancel&&cancel())return {};
-        next->transients=detectedPoints(*next,0,length,100,120,0,.25,cancel);if(cancel&&cancel())return {};{const juce::ScopedLock lock(this->lock);next->analysedPreferred=hostBpm;next->analysedMeter=hostNumerator*4.0/hostDenominator;}int numerator=next->metadata.getValue(juce::WavAudioFormat::acidNumerator,"0").getIntValue(),denominator=next->metadata.getValue(juce::WavAudioFormat::acidDenominator,"0").getIntValue();if(numerator>0&&denominator>0)next->analysedMeter=numerator*4.0/denominator;next->analysedTiming=estimateLoopTiming(next->buffer,next->rate,file.getFileNameWithoutExtension(),next->metadata,next->analysedPreferred,next->analysedMeter);if(cancel&&cancel())return {};if(file.getSize()!=originalSize||file.getLastModificationTime()!=originalModified)return {};AnalysisStore::save(file,*next);
+        int transientType=LibraryStore::playbackType(file);next->transients=(transientType==0||transientType==3||transientType==5)?detectedPoints(*next,0,length,100,120,0,.25,cancel,false):detectedPointsClassic(*next,0,length,100,120,0,.25,cancel);if(cancel&&cancel())return {};{const juce::ScopedLock lock(this->lock);next->analysedPreferred=hostBpm;next->analysedMeter=hostNumerator*4.0/hostDenominator;}int numerator=next->metadata.getValue(juce::WavAudioFormat::acidNumerator,"0").getIntValue(),denominator=next->metadata.getValue(juce::WavAudioFormat::acidDenominator,"0").getIntValue();if(numerator>0&&denominator>0)next->analysedMeter=numerator*4.0/denominator;next->analysedTiming=estimateLoopTiming(next->buffer,next->rate,file.getFileNameWithoutExtension(),next->metadata,next->analysedPreferred,next->analysedMeter);if(cancel&&cancel())return {};if(file.getSize()!=originalSize||file.getLastModificationTime()!=originalModified)return {};AnalysisStore::save(file,*next);
         return next;
     }
     static int keyFromFilename(const juce::String& path){
@@ -573,7 +574,8 @@ public:
         for(size_t i=1;i<envelope.size();++i)if(envelope[i].second>=threshold&&envelope[i-1].second<threshold){int onset=envelope[i-1].first;return juce::jmin(detected,onset);}
         return detected;
     }
-    static std::vector<int> detectedPoints(const AudioData& data,int begin,int end,double strength,double bpm=120,int origin=0,double grid=.25,std::function<bool()> cancel={},bool limitSlices=true){
+    static std::vector<int> detectedPoints(const AudioData& data,int begin,int end,double strength,double bpm=120,int origin=0,double grid=.25,std::function<bool()> cancel={},bool limitSlices=true){if(TransientAnalysis::classic.load())return detectedPointsClassic(data,begin,end,strength,bpm,origin,grid,cancel,limitSlices);auto hierarchy=std::atomic_load(&data.onsetMemo->data);if(!hierarchy||hierarchy->source!=data.buffer.getReadPointer(0)||hierarchy->samples!=data.buffer.getNumSamples()||hierarchy->rate!=data.rate){hierarchy=TransientAnalysis::build(data.buffer,data.rate,cancel);if(!hierarchy)return {};std::atomic_store(&data.onsetMemo->data,hierarchy);}int length=data.buffer.getNumSamples();std::vector<int> accepted;size_t limit=limitSlices?(end<length?253u:255u):std::numeric_limits<size_t>::max();for(auto hit:hierarchy->hits){if(hit.sensitivity>strength)break;if(hit.sample>begin&&hit.sample<end&&accepted.size()<limit)accepted.push_back(hit.sample);}accepted.push_back(0);if(begin>0)accepted.push_back(begin);if(end<length)accepted.push_back(end);accepted.push_back(length);std::sort(accepted.begin(),accepted.end());accepted.erase(std::unique(accepted.begin(),accepted.end()),accepted.end());return accepted;}
+    static std::vector<int> detectedPointsClassic(const AudioData& data,int begin,int end,double strength,double bpm=120,int origin=0,double grid=.25,std::function<bool()> cancel={},bool limitSlices=true){
         int length=data.buffer.getNumSamples();
         const int hop = juce::jmax(32,(int)(data.rate * .003));
         // Build a sensitivity-independent hierarchy. Earlier, stronger detections
