@@ -62,16 +62,27 @@ if args.phase=='prepare':
     if app.exists():raise RuntimeError('Staged app already exists; remove it deliberately before re-preparing.')
     payload.parent.mkdir(parents=True);run('ditto',source,payload)
     macros=app/'Contents/MacOS';macros.mkdir()
-    run('xcrun','swiftc','-O','-target','arm64-apple-macos14.0','-framework','AppKit','-framework','Security',ROOT/'outputs/SliceGroups/Distribution/Installer.swift','-o',macros/'InstallSliceGroups')
+    run('xcrun','swiftc','-module-cache-path',folder/'swift-cache','-O','-target','arm64-apple-macos14.0','-framework','AppKit','-framework','Security',ROOT/'outputs/SliceGroups/Distribution/Installer.swift','-o',macros/'InstallSliceGroups')
     plist={'CFBundleExecutable':'InstallSliceGroups','CFBundleIdentifier':'audio.slicegroups.installer','CFBundleName':'Install Slice Groups','CFBundleDisplayName':'Install Slice Groups','CFBundleShortVersionString':args.version,'CFBundleVersion':args.version,'CFBundlePackageType':'APPL','LSMinimumSystemVersion':'14.0','NSHighResolutionCapable':True,'NSHumanReadableCopyright':'Slice Groups'}
     (app/'Contents/Info.plist').write_bytes(plistlib.dumps(plist))
     sign_tree(app)
-    archive(app,folder/'apple-submission.zip',True)
+    # Both variants receive independent signatures/tickets in one submission.
+    update=folder/'update/Install Slice Groups.app'
+    update.parent.mkdir(exist_ok=True);run('ditto',app,update)
+    for name in ['SCNet.pt','SCNet-HQ.pt']:(update/'Contents/PlugIns/Slice Groups.vst3/Contents/Resources'/name).unlink(missing_ok=True)
+    sign_tree(update)
+    submission=folder/'submission';submission.mkdir(exist_ok=True)
+    run('ditto',app,submission/'full/Install Slice Groups.app')
+    run('ditto',update,submission/'update/Install Slice Groups.app')
+    archive(submission,folder/'apple-submission.zip')
 elif args.phase=='submit-app': submit(folder/'apple-submission.zip','app')
 elif args.phase=='status-app': status('app')
 elif args.phase=='staple-app':
     accepted('app');run('xcrun','stapler','staple',payload);run('xcrun','stapler','validate',payload)
     run('xcrun','stapler','staple',app);run('xcrun','stapler','validate',app);verify(app)
+    update=folder/'update/Install Slice Groups.app'
+    for bundle in [update/'Contents/PlugIns/Slice Groups.vst3',update]:
+        run('xcrun','stapler','staple',bundle);run('xcrun','stapler','validate',bundle);verify(bundle)
 elif args.phase=='make-dmg':
     accepted('app');run('xcrun','stapler','validate',app)
     stage=folder/'disk-image'

@@ -1,5 +1,6 @@
 import AppKit
 import Security
+import CryptoKit
 
 // User-level installer: no shell commands, privilege escalation, telemetry or
 // changes to sample libraries. Existing installations are backed up before replacing.
@@ -33,8 +34,28 @@ struct PluginInstaller {
         }
         return target
     }
+    static func seedModels(_ plugin: URL) throws {
+        #if INSTALLER_TEST
+        let cache = URL(fileURLWithPath: ProcessInfo.processInfo.environment["SLICE_GROUPS_TEST_MODEL_CACHE"]!)
+        #else
+        let cache = fm.homeDirectoryForCurrentUser.appendingPathComponent("Library/Application Support/Slice Groups/Models/scnet-v1")
+        #endif
+        let specs = [("SCNet.pt", "7ad8ab941f3e9a49a6a1847dda64b15af4f523abce41f82c36eaf239ce5c0df7"), ("SCNet-HQ.pt", "a66b584f8e25579059434f7cda01b8e6d0d9ea3488fc4d16162ebc1ce93c241e")]
+        for (name, hash) in specs {
+            let input = plugin.appendingPathComponent("Contents/Resources/\(name)")
+            guard fm.fileExists(atPath: input.path) else { continue }
+            let data = try Data(contentsOf: input, options: .mappedIfSafe)
+            guard SHA256.hash(data: data).map({ String(format: "%02x", $0) }).joined() == hash else { throw problem("Stem model verification failed: \(name)") }
+            try fm.createDirectory(at: cache, withIntermediateDirectories: true)
+            let output = cache.appendingPathComponent(name)
+            if let old = try? Data(contentsOf: output, options: .mappedIfSafe), SHA256.hash(data: old).map({ String(format: "%02x", $0) }).joined() == hash { continue }
+            try data.write(to: output, options: .atomic)
+        }
+    }
     static func install(source: URL, target: URL, backups: URL) throws -> URL? {
         try verify(source)
+        try seedModels(source)
+        if fm.fileExists(atPath: target.path) { try seedModels(target) }
         let parent = target.deletingLastPathComponent()
         try fm.createDirectory(at: parent, withIntermediateDirectories: true)
         guard fm.isWritableFile(atPath: parent.path) else { throw problem("The VST3 folder is not writable: \(parent.path)") }
