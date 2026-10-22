@@ -83,18 +83,20 @@ public:
  void mouseUp(const juce::MouseEvent&)override{if(waiting&&cancel)cancel();waiting=false;repaint();}
 };
 
-class ZoomBar final:public juce::Component{
-    double begin=0,size=1,anchor=0,oldBegin=0,oldEnd=1;int drag=0;
-public:std::function<void(double,double)> changed;
+class ZoomBar final:public juce::Component,public juce::SettableTooltipClient{
+    bool vertical=false;double begin=0,size=1,anchor=0,oldBegin=0,oldEnd=1;int drag=0;
+public:explicit ZoomBar(bool isVertical=false):vertical(isVertical){}
+    double axisLength()const{return juce::jmax(1,vertical?getHeight():getWidth());}double axis(const juce::MouseEvent& e)const{return vertical?e.y:e.x;}
+    std::function<void(double,double)> changed;
     void setAutoHide(bool){}void setRangeLimits(double,double){}void addListener(juce::ScrollBar::Listener*){}void removeListener(juce::ScrollBar::Listener*){}void setSingleStepSize(double){}
     void setCurrentRange(double a,double b,juce::NotificationType){begin=a;size=b;repaint();}
-    void paint(juce::Graphics& g)override{g.fillAll(juce::Colour(0xff303030));float a=(float)(begin*getWidth()),w=(float)(size*getWidth());g.setColour(juce::Colour(0xff686868));g.fillRect(a,0.f,w,(float)getHeight());g.setColour(juce::Colour(0xffaaaaaa));g.fillRect(a,0.f,3.f,(float)getHeight());g.fillRect(a+w-3,0.f,3.f,(float)getHeight());}
+    void paint(juce::Graphics& g)override{g.fillAll(juce::Colour(0xff303030));float a=(float)(begin*axisLength()),w=(float)(size*axisLength());auto rect=[&](float point,float length){return vertical?juce::Rectangle<float>(0,point,(float)getWidth(),length):juce::Rectangle<float>(point,0,length,(float)getHeight());};g.setColour(juce::Colour(0xff686868));g.fillRect(rect(a,w));g.setColour(juce::Colour(0xffaaaaaa));g.fillRect(rect(a,3));g.fillRect(rect(a+w-3,3));}
     void resetZoom(){drag=0;begin=0;size=1;if(changed)changed(0,1);repaint();}
     void mouseDoubleClick(const juce::MouseEvent&)override{resetZoom();}
-    void mouseDown(const juce::MouseEvent& e)override{if(e.mods.isAltDown()){resetZoom();return;}anchor=e.x/(double)getWidth();oldBegin=begin;oldEnd=begin+size;double a=begin*getWidth(),b=(begin+size)*getWidth();drag=std::abs(e.x-a)<9?1:std::abs(e.x-b)<9?2:3;}
+    void mouseDown(const juce::MouseEvent& e)override{if(e.mods.isAltDown()){resetZoom();return;}anchor=axis(e)/axisLength();oldBegin=begin;oldEnd=begin+size;double a=begin*axisLength(),b=(begin+size)*axisLength();drag=std::abs(axis(e)-a)<9?1:std::abs(axis(e)-b)<9?2:3;}
     void dragTo(double point){double a=oldBegin,b=oldEnd;if(drag==1)a=juce::jlimit(0.,b-1./64,point);else if(drag==2)b=juce::jlimit(a+1./64,1.,point);else{a=juce::jlimit(0.,1.-size,oldBegin+point-anchor);b=a+size;}begin=a;size=b-a;if(changed)changed(a,size);repaint();}
-    void mouseDrag(const juce::MouseEvent& e)override{if(!drag)return;dragTo(e.x/(double)getWidth());}void mouseUp(const juce::MouseEvent&)override{drag=0;}
-    void mouseMove(const juce::MouseEvent& e)override{bool edge=std::abs(e.x-begin*getWidth())<9||std::abs(e.x-(begin+size)*getWidth())<9;setMouseCursor(edge?juce::MouseCursor::LeftRightResizeCursor:juce::MouseCursor::DraggingHandCursor);}
+    void mouseDrag(const juce::MouseEvent& e)override{if(!drag)return;dragTo(axis(e)/axisLength());}void mouseUp(const juce::MouseEvent&)override{drag=0;}
+    void mouseMove(const juce::MouseEvent& e)override{bool edge=std::abs(axis(e)-begin*axisLength())<9||std::abs(axis(e)-(begin+size)*axisLength())<9;setMouseCursor(edge?(vertical?juce::MouseCursor::UpDownResizeCursor:juce::MouseCursor::LeftRightResizeCursor):juce::MouseCursor::DraggingHandCursor);}
 };
 
 class SquareLook:public juce::LookAndFeel_V4{public:void drawButtonText(juce::Graphics& g,juce::TextButton& b,bool hover,bool down)override{if(b.getButtonText()=="M"||b.getButtonText()=="S"){g.setColour(b.findColour(b.getToggleState()?juce::TextButton::textColourOnId:juce::TextButton::textColourOffId));g.setFont(10);g.drawText(b.getButtonText(),b.getLocalBounds().reduced(1),juce::Justification::centred,false);}else juce::LookAndFeel_V4::drawButtonText(g,b,hover,down);}void drawComboBox(juce::Graphics& g,int width,int height,bool,int,int,int,int,juce::ComboBox& box)override{g.setColour(box.findColour(juce::ComboBox::backgroundColourId));g.fillRect(0,0,width,height);g.setColour(box.findColour(juce::ComboBox::outlineColourId));g.drawRect(0,0,width,height);juce::Path arrow;float x=width-13.f,y=height*.5f;arrow.startNewSubPath(x-4,y-2);arrow.lineTo(x,y+2);arrow.lineTo(x+4,y-2);g.setColour(box.findColour(juce::ComboBox::textColourId));g.strokePath(arrow,juce::PathStrokeType(1.5f));}void drawButtonBackground(juce::Graphics& g,juce::Button& b,const juce::Colour& c,bool hover,bool down)override{g.setColour(hover||down?c.brighter(.1f):c);g.fillRect(b.getLocalBounds());g.setColour(juce::Colour(0xff555555));g.drawRect(b.getLocalBounds());}};

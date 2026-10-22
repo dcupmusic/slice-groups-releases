@@ -1,6 +1,8 @@
 #include "NativeTrash.h"
 #import <Foundation/Foundation.h>
+#import <AppKit/AppKit.h>
 namespace NativeTrash {
+bool keyIsRepeat(){NSEvent* event=[NSApp currentEvent];return event&&event.type==NSEventTypeKeyDown&&event.isARepeat;}
 static NSURL* url(const juce::File& file){return [NSURL fileURLWithPath:[NSString stringWithUTF8String:file.getFullPathName().toRawUTF8()]];}
 bool move(const juce::File& original,juce::File& location,juce::String& message){@autoreleasepool {
  NSError* error=nil;NSURL* moved=nil;

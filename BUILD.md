@@ -1,4 +1,4 @@
-# Building 0.40.3
+# Building 0.40.6
 
 Use an Apple Silicon Mac with macOS 14+, Xcode command-line tools and CMake 3.22+. GitHub’s automatic source ZIP contains the current application source; dependencies are unchanged from 0.40.2 and are downloaded only once.
 

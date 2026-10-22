@@ -34,6 +34,15 @@ Slice Groups source is licensed under **AGPLv3-or-later**. Dependencies retain t
 - Bulk one-shot Mono/Poly editing; Legato is hidden in Poly.
 - Dragging files or folders between library folders moves audio and metadata.
 
+
+## New in 0.40.6
+
+- Sequencer vertical pitch scrolling and cursor-centred zoom: wheel to scroll, Command-wheel to zoom, or drag the right-side bar/ends.
+- Drag empty space to lasso notes; Shift-drag adds to the selection. Delete removes selected notes, Clear removes all notes; both support undo.
+- Previous File, Next File and Move to Trash are configurable in Settings → Keyboard Shortcuts. Shortcuts also cover the top mixer strip, allow read-only displays, and avoid stale held-key state while suppressing native autorepeat for file actions. Editable text remains protected.
+- Destination folders highlight while dragging files/folders.
+- Fresh Slice files default to both grid and slice snapping off; saved snapping settings are retained.
+
 ## New in 0.40.3
 
 - Sequencer Swing is a rotary knob. Sixteenth-note tick lines remain visible at every zoom level; labels adapt to available space.

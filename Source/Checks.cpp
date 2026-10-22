@@ -1,3 +1,6 @@
+int runBrowser406();
+int runLasso405();
+int runNavigation404();
 int runDistribution403();
 int runSwing402();
 int runVoice401();
@@ -106,6 +109,9 @@ int runSliceGroupsTransportChecks();
 int runSliceGroupsGuiCheck(const char*);
 int main(int argc,char** argv) {
     setenv("SLICE_GROUPS_DISABLE_UPDATES","1",1);
+    if(argc==2&&std::string(argv[1])=="--browser406-check")return runBrowser406();
+    if(argc==2&&std::string(argv[1])=="--lasso405-check")return runLasso405();
+    if(argc==2&&std::string(argv[1])=="--navigation404-check")return runNavigation404();
     if(argc==2&&std::string(argv[1])=="--distribution403-check")return runDistribution403();
     if(argc==2&&std::string(argv[1])=="--swing402-check")return runSwing402();
     if(argc==2&&std::string(argv[1])=="--voice401-check")return runVoice401();
