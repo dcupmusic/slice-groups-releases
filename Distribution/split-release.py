@@ -4,14 +4,18 @@ Model assets are immutable: upload them once to v0.40.3, not every release.
 Source is GitHub's automatic archive; dependency sources remain in v0.40.2.
 """
 from pathlib import Path
-import argparse,hashlib,subprocess,shutil,json
+import argparse,hashlib,subprocess,shutil,json,time
 p=argparse.ArgumentParser();p.add_argument('version');args=p.parse_args()
 root=Path(__file__).resolve().parents[3];folder=root/'work/distribution'/args.version;notary=folder/'notarized'
 assert json.loads((notary/'app-status.json').read_text())['status']=='Accepted'
 for name,suffix in [('Install Slice Groups.app','-Installer'),('update/Install Slice Groups.app','-Update')]:
  app=notary/name
  for bundle in [app,app/'Contents/PlugIns/Slice Groups.vst3']:
-  subprocess.run(['xcrun','stapler','validate',str(bundle)],check=True)
+  for attempt in range(6):
+   result=subprocess.run(['xcrun','stapler','validate',str(bundle)])
+   if result.returncode==0:break
+   if result.returncode!=68 or attempt==5:result.check_returncode()
+   time.sleep(3+attempt)
   subprocess.run(['codesign','--verify','--deep','--strict',str(bundle)],check=True)
  stage=folder/('full-download' if suffix=='-Installer' else 'update-download')
  if stage.exists():shutil.rmtree(stage)
