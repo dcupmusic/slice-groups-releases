@@ -1,3 +1,6 @@
+int runDelta411();
+int runDisk410();
+int runGrid409();
 int runTransient407(const char*,const char*);
 int runBrowser406();
 int runLasso405();
@@ -111,6 +114,9 @@ int runSliceGroupsGuiCheck(const char*);
 int main(int argc,char** argv) {
     setenv("SLICE_GROUPS_DISABLE_UPDATES","1",1);
     if(argc==4&&std::string(argv[1])=="--transient407-check")return runTransient407(argv[2],argv[3]);
+    if(argc==2&&std::string(argv[1])=="--delta411-check")return runDelta411();
+    if(argc==2&&std::string(argv[1])=="--disk410-check")return runDisk410();
+    if(argc==2&&std::string(argv[1])=="--grid409-check")return runGrid409();
     if(argc==2&&std::string(argv[1])=="--browser406-check")return runBrowser406();
     if(argc==2&&std::string(argv[1])=="--lasso405-check")return runLasso405();
     if(argc==2&&std::string(argv[1])=="--navigation404-check")return runNavigation404();

@@ -44,6 +44,14 @@ Slice Groups source is licensed under **AGPLv3-or-later**. Dependencies retain t
 - Fresh Slice files default to both grid and slice snapping off; saved snapping settings are retained.
 
 
+
+## New in 0.40.11
+
+- Incremental browser updates for moves, renames, deletes and Trash Undo; existing lists remain visible while results update.
+- macOS filesystem notifications update affected folders after Finder changes without periodic library scans.
+- One-file changes no longer rewrite the whole SQLite catalogue or rebuild/sort every browser row.
+- Grid/BPM adjustments pivot around loop-in, keeping it fixed; Undo and saved recall preserve the anchor.
+
 ## New in 0.40.8
 
 - Enhanced transient detection with frequency-band analysis, improved bass rejection, attack positioning and duplicate suppression. Compare Enhanced and Classic in Settings.
