@@ -21,9 +21,18 @@ The full installer bundles stem models and the runtime. Lightweight updates reus
 
 ## Source
 
-The application source is readable in this repository. Use GitHub’s automatic source download for the current code. Download unchanged dependencies once from the permanent **0.40.2 Source.zip release asset**, which includes full dependency sources, headers, runtime libraries and model weights. See BUILD.md and THIRD_PARTY.md for exact build steps.
+The application source is readable in this repository. Use GitHub’s automatic source download for the current code. Download unchanged dependencies once from the permanent **0.40.2 Source.zip release asset**, which includes full dependency sources, headers, runtime libraries and model weights. MIDI extraction additionally needs the small ONNX dependency ZIP attached to v0.42.3. See BUILD.md and THIRD_PARTY.md for exact build steps.
 
 Slice Groups source is licensed under **AGPLv3-or-later**. Dependencies retain their own licenses.
+
+## New in 0.42.3
+
+- Native audio-to-MIDI extraction, spectrogram overlay, default Auto Quantise, longer-note priority in Mono mode and improved attack cleanup.
+- Audition One Shot/Multi sounds from the browser or presets before confirmation; directly replace the source loop with that instrument and the edited MIDI.
+- Independent BASS/SYNTH MIDI export folders; improved sequence locking and playback continuity.
+- Folder keyword/ancestor import rules, clickable tag suggestions, melodic slicing with round robin, hover-to-delete mappings and Undo.
+- Fold Notes, pitch-label dragging, horizontal pinch zoom, numeric input validation, faster group switching and improved meters.
+- Synced Track-mode stem previews while whole-track timing is prepared.
 
 ## New in 0.40.2
 

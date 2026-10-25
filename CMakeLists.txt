@@ -1,13 +1,13 @@
 cmake_minimum_required(VERSION 3.22)
 set(CMAKE_OSX_DEPLOYMENT_TARGET "14.0" CACHE STRING "Minimum macOS version" FORCE)
-project(SliceGroups VERSION 0.40.11)
+project(SliceGroups VERSION 0.42.3)
 set(CMAKE_CXX_STANDARD 17)
 set(JUCE_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/Dependencies/JUCE" CACHE PATH "JUCE checkout")
 add_subdirectory(${JUCE_ROOT} juce)
 juce_add_plugin(SliceGroups COMPANY_NAME "Slice Groups" BUNDLE_ID "audio.slicegroups.plugin" PLUGIN_MANUFACTURER_CODE Slgr PLUGIN_CODE Slgp FORMATS VST3 Standalone PRODUCT_NAME "Slice Groups" IS_SYNTH TRUE NEEDS_MIDI_INPUT TRUE NEEDS_MIDI_OUTPUT FALSE COPY_PLUGIN_AFTER_BUILD FALSE)
 find_package(SQLite3 REQUIRED)
 enable_language(OBJCXX)
-target_sources(SliceGroups PRIVATE Source/Main.cpp Source/NativeTrash.mm)
+target_sources(SliceGroups PRIVATE Source/Main.cpp Source/NativeTrash.mm Source/MidiExtraction.cpp)
 target_compile_definitions(SliceGroups PUBLIC SLICE_GROUPS_LEGACY_TRIAL=1 JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0 JUCE_USE_MP3AUDIOFORMAT=1 JUCE_VST3_CAN_REPLACE_VST2=0)
 target_link_libraries(SliceGroups PRIVATE "-framework CoreServices" SQLite::SQLite3 juce::juce_audio_utils juce::juce_dsp juce::juce_cryptography PUBLIC juce::juce_recommended_config_flags)
 add_executable(SliceGroupsChecks Source/Checks.cpp)
@@ -57,4 +57,18 @@ foreach(stem_target SliceGroups_VST3 SliceGroups_Standalone)
   COMMAND /usr/bin/codesign --force --sign - "$<TARGET_BUNDLE_DIR:${stem_target}>/Contents/Frameworks/libSliceGroupsSCNet.dylib"
   COMMAND /usr/bin/codesign --force --sign - "$<TARGET_BUNDLE_DIR:${stem_target}>"
   VERBATIM)
+endforeach()
+
+# Local polyphonic audio-to-MIDI inference; CPU only and one thread per session.
+target_include_directories(SliceGroups PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/Vendor/onnxruntime/include)
+target_link_libraries(SliceGroups PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/Vendor/onnxruntime/libonnxruntime.1.26.0.dylib)
+set_property(TARGET SliceGroups APPEND PROPERTY BUILD_RPATH "${CMAKE_CURRENT_SOURCE_DIR}/Vendor/onnxruntime")
+set_property(TARGET SliceGroupsChecks APPEND PROPERTY BUILD_RPATH "${CMAKE_CURRENT_SOURCE_DIR}/Vendor/onnxruntime")
+foreach(extract_target SliceGroups_VST3 SliceGroups_Standalone)
+ add_custom_command(TARGET ${extract_target} POST_BUILD
+  COMMAND ${CMAKE_COMMAND} -E copy "${CMAKE_CURRENT_SOURCE_DIR}/Vendor/onnxruntime/libonnxruntime.1.26.0.dylib" "$<TARGET_BUNDLE_DIR:${extract_target}>/Contents/Frameworks/libonnxruntime.1.dylib"
+  COMMAND ${CMAKE_COMMAND} -E copy "${CMAKE_CURRENT_SOURCE_DIR}/Vendor/onnxruntime/LICENSE" "$<TARGET_BUNDLE_DIR:${extract_target}>/Contents/Resources/ONNX-Runtime-LICENSE.txt"
+  COMMAND ${CMAKE_COMMAND} -E copy "${CMAKE_CURRENT_SOURCE_DIR}/Vendor/onnxruntime/ThirdPartyNotices.txt" "$<TARGET_BUNDLE_DIR:${extract_target}>/Contents/Resources/ONNX-Runtime-ThirdPartyNotices.txt"
+  COMMAND /usr/bin/codesign --force --sign - "$<TARGET_BUNDLE_DIR:${extract_target}>/Contents/Frameworks/libonnxruntime.1.dylib"
+  COMMAND /usr/bin/codesign --force --sign - "$<TARGET_BUNDLE_DIR:${extract_target}>" VERBATIM)
 endforeach()

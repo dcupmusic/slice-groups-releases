@@ -1,10 +1,11 @@
-# Building 0.40.11
+# Building 0.42.3
 
-Use an Apple Silicon Mac with macOS 14+, Xcode command-line tools and CMake 3.22+. GitHub’s automatic source ZIP contains the current application source; dependencies are unchanged from 0.40.2 and are downloaded only once.
+Use an Apple Silicon Mac with macOS 14+, Xcode command-line tools and CMake 3.22+. GitHub’s automatic source ZIP contains the current application source; the base dependencies from 0.40.2 are downloaded only once. MIDI extraction adds ONNX Runtime 1.26.0.
 
 1. Download [the dependency/source bundle](https://github.com/dcupmusic/slice-groups-releases/releases/download/v0.40.2/SliceGroups-0.40.2-Source.zip), extract it, and copy its `Dependencies/` and `Vendor/` directories into this checkout. This includes complete dependency source, licenses, model architecture and the native Torch SDK/runtime.
-2. For a full offline installer, also copy `Resources/SCNet.pt` and `Resources/SCNet-HQ.pt` from that bundle. Without bundled weights, the plugin downloads verified models on first stem use.
-3. Build:
+2. Download [the ONNX dependency add-on](https://github.com/dcupmusic/slice-groups-releases/releases/download/v0.42.3/SliceGroups-0.42.3-ONNX-Dependency.zip) and extract its `Vendor/` into this checkout, merging it with the base bundle. This adds ONNX Runtime headers, the Apple Silicon runtime and licenses; no Python runtime is required. The Basic Pitch model and Apache-2.0 notices are tracked in `Resources/`.
+3. For a full offline installer, also copy `Resources/SCNet.pt` and `Resources/SCNet-HQ.pt` from that bundle. Without bundled weights, the plugin downloads verified models on first stem use.
+4. Build:
 
 ```sh
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_OSX_ARCHITECTURES=arm64
