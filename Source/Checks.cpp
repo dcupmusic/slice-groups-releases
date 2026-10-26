@@ -1,3 +1,11 @@
+int runBrowser432();
+int runSimilarity431();
+int runSimilarity430();
+int runSharing428();
+int runFeatures427();
+int runFeatures426();
+int runFeatures425();
+int runFeatures424();
 int runFeatures423();
 int runFeatures422();
 int runFeatures421();
@@ -129,6 +137,14 @@ int main(int argc,char** argv) {
     if(argc==4&&std::string(argv[1])=="--transient407-check")return runTransient407(argv[2],argv[3]);
     if(argc==3&&std::string(argv[1])=="--timing412-check")return runTiming412(argv[2]);
     if(argc==2&&std::string(argv[1])=="--preanalysis411-check")return runPreanalysis411();
+    if(argc==2&&std::string(argv[1])=="--browser432-check")return runBrowser432();
+    if(argc==2&&std::string(argv[1])=="--similarity431-check")return runSimilarity431();
+    if(argc==2&&std::string(argv[1])=="--similarity430-check")return runSimilarity430();
+    if(argc==2&&std::string(argv[1])=="--sharing428-check")return runSharing428();
+    if(argc==2&&std::string(argv[1])=="--features427-check")return runFeatures427();
+    if(argc==2&&std::string(argv[1])=="--features426-check")return runFeatures426();
+    if(argc==2&&std::string(argv[1])=="--features425-check")return runFeatures425();
+    if(argc==2&&std::string(argv[1])=="--features424-check")return runFeatures424();
     if(argc==2&&std::string(argv[1])=="--features423-check")return runFeatures423();
     if(argc==2&&std::string(argv[1])=="--features422-check")return runFeatures422();
     if(argc==2&&std::string(argv[1])=="--features421-check")return runFeatures421();

@@ -2,49 +2,124 @@
 // Dropbox transports owner-written, portable snapshots. The live SQLite database
 // stays local; collaborators never write metadata into another owner's library.
 class OwnedLibrarySharing final:private juce::Thread,public juce::DeletedAtShutdown {
+ friend int runSharing428();
  using Layers=std::map<juce::String,juce::var>;
  struct View{Layers merged,remote;std::map<juce::String,juce::String> owners;juce::String me,error;};
- std::shared_ptr<const View> published=std::make_shared<const View>();juce::WaitableEvent wake;juce::String me,scanFingerprint;juce::CriticalSection identityMutex,scanMutex;
- std::map<juce::String,juce::String> stamps,encoded;std::map<juce::String,juce::var> documents;
+ struct Cancelled:std::exception{const char* what()const noexcept override{return "Sharing is stopping";}};
+ std::shared_ptr<const View> published=std::make_shared<const View>();
+ juce::WaitableEvent wake;juce::String me,scanFingerprint,remoteFingerprint;juce::CriticalSection identityMutex,scanMutex;
+ std::map<juce::String,juce::String> stamps,documentStamps;std::map<juce::String,juce::var> documents;
  std::map<juce::String,uint64_t> revisions;
+ std::atomic<int> phase{0};std::atomic<uint64_t> writtenBytes{0},mergePasses{0};
+ struct Phase {std::atomic<int>& value;int prior;Phase(std::atomic<int>& v,int next):value(v),prior(v.exchange(next)){}~Phase(){value=prior;}};
+ static constexpr const char* kinds[]{"tags.json","keys.json","playback-types.json","loops.json","folder-colours.json"};
+ void checkpoint()const{if(threadShouldExit())throw Cancelled();}
+ juce::var local(juce::String kind){checkpoint();return LibraryStore::database()->snapshot(kind,[this]{checkpoint();});}
  static bool inside(juce::String path,juce::File root){return path==root.getFullPathName()||path.startsWith(root.getFullPathName()+juce::File::getSeparatorString());}
  static bool relativeOK(juce::String path){if(path==".")return true;if(path.isEmpty()||juce::File::isAbsolutePath(path)||path.containsChar('\\'))return false;for(auto part:juce::StringArray::fromTokens(path,"/",""))if(part==".."||part=="."||part.isEmpty())return false;return !path.startsWithChar('.');}
- static bool atomicJSON(juce::File file,juce::var data){if(!file.getParentDirectory().createDirectory())return false;juce::TemporaryFile tmp(file);return tmp.getFile().replaceWithText(juce::JSON::toString(data))&&tmp.overwriteTargetFileWithTemporary();}
+ static juce::String fileStamp(juce::File file){return juce::String(file.getLastModificationTime().toMilliseconds())+":"+juce::String(file.getSize());}
+ // JSON formatting writes into a temporary file. Cancellation only discards
+ // that temporary file; the last complete snapshot stays in place.
+ class SharingOutput final:public juce::OutputStream {
+  OwnedLibrarySharing& owner;juce::OutputStream& destination;
+ public:
+  bool good=true;
+  SharingOutput(OwnedLibrarySharing& service,juce::OutputStream& output):owner(service),destination(output){}
+  void flush()override{destination.flush();}
+  bool setPosition(juce::int64 position)override{return destination.setPosition(position);}
+  juce::int64 getPosition()override{return destination.getPosition();}
+  bool write(const void* source,size_t bytes)override{auto* data=static_cast<const char*>(source);while(bytes){owner.checkpoint();auto count=juce::jmin(bytes,size_t(65536));if(!destination.write(data,count)){good=false;return false;}owner.writtenBytes.fetch_add(count,std::memory_order_relaxed);data+=count;bytes-=count;}return true;}
+ };
+ bool atomicJSON(juce::File file,const juce::var& data){
+  checkpoint();Phase writing(phase,3);if(!file.getParentDirectory().createDirectory())return false;
+  juce::TemporaryFile temporary(file);bool good=false;
+  {juce::FileOutputStream destination(temporary.getFile(),65536);if(!destination.openedOk())return false;SharingOutput output(*this,destination);juce::JSON::writeToStream(output,data);output.flush();good=output.good&&destination.getStatus().wasOk();}
+  checkpoint();return good&&temporary.overwriteTargetFileWithTemporary();
+ }
+ juce::var readDocument(juce::File file){checkpoint();auto key=file.getFullPathName(),stamp=fileStamp(file);if(!documents.count(key)||documentStamps[key]!=stamp){auto doc=juce::JSON::parse(file);checkpoint();if(doc.isObject()){documents[key]=doc;documentStamps[key]=stamp;}}auto found=documents.find(key);return found==documents.end()?juce::var():found->second;}
  void identity(){const juce::ScopedLock lock(identityMutex);if(me.isNotEmpty())return;auto file=LibraryStore::root().getChildFile("sharing-owner-id.txt");juce::InterProcessLock guard("SliceGroupsSharingIdentity-"+juce::String(LibraryStore::root().getFullPathName().hashCode64()));if(!guard.enter(1000))return;me=file.loadFileAsString().trim();if(me.isEmpty()){me=juce::Uuid().toString();file.getParentDirectory().createDirectory();file.replaceWithText(me);}guard.exit();}
- void scan(){const juce::ScopedLock scanGuard(scanMutex);identity();if(me.isEmpty())return;auto next=std::make_shared<View>();next->me=me;auto roots=LibraryStore::libraryRoots();juce::String fingerprint;for(auto root:roots){auto folder=root.getChildFile(".slicegroups/sharing-v2");auto manifest=folder.getChildFile("owner.json");fingerprint+=root.getFullPathName()+":"+juce::String(manifest.getLastModificationTime().toMilliseconds());for(auto file:folder.findChildFiles(juce::File::findFiles,false,"*.json"))fingerprint+=file.getFileName()+juce::String(file.getLastModificationTime().toMilliseconds())+":"+juce::String(file.getSize());}for(auto kind:{"tags.json","keys.json","playback-types.json","loops.json","folder-colours.json"})fingerprint+=juce::String((juce::int64)LibraryStore::database()->metadataSerial(kind))+":";fingerprint+=juce::String((juce::int64)LibraryStore::database()->metadataSerial("shared-root-paths.json"));if(fingerprint==scanFingerprint)return;scanFingerprint=fingerprint;Layers local;bool any=false;
-  for(auto root:roots){auto manifest=juce::JSON::parse(root.getChildFile(".slicegroups/sharing-v2/owner.json"));auto owner=manifest.getProperty("owner",{}).toString();if(owner.length()<32||owner.length()>36||!owner.containsOnly("0123456789abcdefABCDEF-")||(int)manifest.getProperty("version",0)!=2)continue;any=true;next->owners[root.getFullPathName()]=owner;auto remembered=LibraryStore::readLocal("library-owners.json");if(remembered.getProperty(root.getFullPathName(),{}).toString()!=owner)LibraryStore::database()->mutate("library-owners.json",[&](juce::DynamicObject& o){o.setProperty(root.getFullPathName(),owner);});
-   auto folder=root.getChildFile(".slicegroups/sharing-v2");auto file=folder.getChildFile(owner+".json");
+
+ void scan(){
+  const juce::ScopedLock scanGuard(scanMutex);checkpoint();Phase scanning(phase,1);identity();checkpoint();if(me.isEmpty())return;
+  auto prior=std::atomic_load(&published);auto next=std::make_shared<View>();next->me=me;
+  auto roots=LibraryStore::libraryRoots();juce::String fingerprint;std::map<juce::String,uint64_t> serials;
+  for(auto root:roots){checkpoint();auto folder=root.getChildFile(".slicegroups/sharing-v2");auto manifest=folder.getChildFile("owner.json");fingerprint+=root.getFullPathName()+":"+fileStamp(manifest);for(auto file:folder.findChildFiles(juce::File::findFiles,false,"*.json")){checkpoint();fingerprint+=file.getFileName()+fileStamp(file);}}
+  for(auto kind:kinds){checkpoint();auto serial=LibraryStore::database()->metadataSerial(kind);serials[kind]=serial;fingerprint+=juce::String((juce::int64)serial)+":";}
+  fingerprint+=juce::String((juce::int64)LibraryStore::database()->metadataSerial("shared-root-paths.json"));
+  if(fingerprint==scanFingerprint)return;
+  Layers locals;bool readOnly=false,retry=false;juce::String remoteToken;
+  auto getLocal=[&](juce::String kind)->juce::var{if(!locals.count(kind))locals[kind]=local(kind);return locals[kind];};
+  for(auto root:roots){
+   checkpoint();auto folder=root.getChildFile(".slicegroups/sharing-v2");auto manifest=juce::JSON::parse(folder.getChildFile("owner.json"));auto owner=manifest.getProperty("owner",{}).toString();
+   if(owner.length()<32||owner.length()>36||!owner.containsOnly("0123456789abcdefABCDEF-")||(int)manifest.getProperty("version",0)!=2)continue;
+   next->owners[root.getFullPathName()]=owner;auto remembered=local("library-owners.json");
+   if(remembered.getProperty(root.getFullPathName(),{}).toString()!=owner)LibraryStore::database()->mutate("library-owners.json",[&](juce::DynamicObject& o){o.setProperty(root.getFullPathName(),owner);});
+   auto file=folder.getChildFile(owner+".json");
    if(owner==me){
-    auto previous=juce::JSON::parse(file);auto rootId=previous.getProperty("rootId",{}).toString();auto registry=LibraryStore::readLocal("shared-root-paths.json");
+    auto previous=readDocument(file);auto rootId=previous.getProperty("rootId",{}).toString();auto registry=local("shared-root-paths.json");
     if(rootId.isEmpty()){
      rootId=juce::Uuid().toString();juce::String origin=root.getFullPathName();bool portable=false,localData=false;auto fields=previous.getProperty("fields",{});
-     for(auto kind:{"tags.json","keys.json","playback-types.json","loops.json","folder-colours.json"}){if(!local.count(kind))local[kind]=LibraryStore::readLocal(kind);if(auto* o=fields.getProperty(kind,{}).getDynamicObject())portable|=!o->getProperties().isEmpty();for(auto& item:local[kind].getDynamicObject()->getProperties())localData|=inside(item.name.toString(),root);}
+     for(auto kind:kinds){checkpoint();auto values=getLocal(kind);if(auto* object=fields.getProperty(kind,{}).getDynamicObject())portable|=!object->getProperties().isEmpty();for(auto& item:values.getDynamicObject()->getProperties()){checkpoint();localData|=inside(item.name.toString(),root);}}
      // A pre-upgrade snapshot at a new path must not be overwritten with emptiness.
      if(portable&&!localData)origin="unresolved";
-     LibraryStore::database()->mutate("shared-root-paths.json",[&](juce::DynamicObject& o){o.setProperty(rootId,origin);});
-     if(previous.isObject()){previous.getDynamicObject()->setProperty("rootId",rootId);if(!atomicJSON(file,previous))continue;}
-     registry=LibraryStore::readLocal("shared-root-paths.json");
+     checkpoint();LibraryStore::database()->mutate("shared-root-paths.json",[&](juce::DynamicObject& object){object.setProperty(rootId,origin);});
+     if(previous.isObject()){juce::var copy(new juce::DynamicObject());for(auto& item:previous.getDynamicObject()->getProperties()){checkpoint();copy.getDynamicObject()->setProperty(item.name,item.value);}previous=copy;previous.getDynamicObject()->setProperty("rootId",rootId);if(!atomicJSON(file,previous)){retry=true;continue;}}
+     registry=local("shared-root-paths.json");
     }
-    auto registered=registry.getProperty(rootId,{}).toString();
-    if(registered!=root.getFullPathName()){next->error="Use Relocate Library to link the moved library: "+root.getFileName();continue;}
-juce::String stamp;for(auto kind:{"tags.json","keys.json","playback-types.json","loops.json","folder-colours.json"})stamp+=juce::String((juce::int64)LibraryStore::database()->metadataSerial(kind))+":";
-    auto key=root.getFullPathName();if(stamps[key]!=stamp||!file.existsAsFile()){
-     auto* document=new juce::DynamicObject();document->setProperty("version",2);document->setProperty("owner",me);document->setProperty("rootId",rootId);auto* fields=new juce::DynamicObject();
-     for(auto kind:{"tags.json","keys.json","playback-types.json","loops.json","folder-colours.json"}){if(!local.count(kind))local[kind]=LibraryStore::readLocal(kind);auto* values=new juce::DynamicObject();for(auto& item:local[kind].getDynamicObject()->getProperties()){auto path=item.name.toString();if(!juce::File::isAbsolutePath(path)||!inside(path,root))continue;juce::String relative=path==root.getFullPathName()?".":juce::File(path).getRelativePathFrom(root).replaceCharacter('\\','/');if(!relativeOK(relative))continue;auto value=item.value;if(juce::String(kind)=="loops.json")if(auto xml=juce::parseXML(value.toString())){xml->removeAttribute("file");xml->removeAttribute("normalise");xml->removeAttribute("normaliseLufs");xml->removeAttribute("targetLufs");value=xml->toString();}values->setProperty(relative,value);}fields->setProperty(kind,juce::var(values));}
-     document->setProperty("fields",juce::var(fields));if(atomicJSON(file,juce::var(document)))stamps[key]=stamp;else next->error="Could not publish shared metadata: "+root.getFileName();
+    if(registry.getProperty(rootId,{}).toString()!=root.getFullPathName()){next->error="Use Relocate Library to link the moved library: "+root.getFileName();continue;}
+    // Bind the publication stamp to the revisions captured before its snapshots.
+    // A concurrent local edit therefore always triggers another publication.
+    juce::String stamp;for(auto kind:kinds)stamp+=juce::String((juce::int64)serials[kind])+":";
+    auto key=root.getFullPathName();
+    if(stamps[key]!=stamp||!file.existsAsFile()){
+     Phase preparing(phase,2);juce::var document(new juce::DynamicObject()),fields(new juce::DynamicObject());auto* object=document.getDynamicObject();object->setProperty("version",2);object->setProperty("owner",me);object->setProperty("rootId",rootId);
+     for(auto kind:kinds){
+      checkpoint();auto source=getLocal(kind);juce::var values(new juce::DynamicObject());
+      for(auto& item:source.getDynamicObject()->getProperties()){
+       checkpoint();auto path=item.name.toString();if(!juce::File::isAbsolutePath(path)||!inside(path,root))continue;
+       auto relative=path==root.getFullPathName()?juce::String("."):juce::File(path).getRelativePathFrom(root).replaceCharacter('\\','/');if(!relativeOK(relative))continue;
+       auto value=item.value;if(juce::String(kind)=="loops.json")if(auto xml=juce::parseXML(value.toString())){xml->removeAttribute("file");xml->removeAttribute("normalise");xml->removeAttribute("normaliseLufs");xml->removeAttribute("targetLufs");value=xml->toString();}
+       values.getDynamicObject()->setProperty(relative,value);
+      }
+      fields.getDynamicObject()->setProperty(kind,values);
+     }
+     object->setProperty("fields",fields);
+     if(atomicJSON(file,document)){stamps[key]=stamp;documents[file.getFullPathName()]=document;documentStamps[file.getFullPathName()]=fileStamp(file);}else{retry=true;next->error="Could not publish shared metadata: "+root.getFileName();}
     }
-   }else{auto key=file.getFullPathName(),stamp=juce::String(file.getLastModificationTime().toMilliseconds())+":"+juce::String(file.getSize());if(stamps[key]!=stamp){auto doc=juce::JSON::parse(file);if(doc.isObject()&&(int)doc.getProperty("version",0)==2&&doc.getProperty("owner",{}).toString()==owner){documents[key]=doc;stamps[key]=stamp;}}
-    auto found=documents.find(key);if(found==documents.end())continue;auto fields=found->second.getProperty("fields",{});if(!fields.isObject())continue;
-    for(auto kind:{"tags.json","keys.json","playback-types.json","loops.json","folder-colours.json"}){auto values=fields.getProperty(kind,{});if(!values.isObject())continue;auto& layer=next->remote[kind];if(!layer.isObject())layer=juce::var(new juce::DynamicObject());for(auto& item:values.getDynamicObject()->getProperties()){auto path=item.name.toString();if(!relativeOK(path))continue;auto target=path=="."?root:root.getChildFile(path);auto value=item.value;if(juce::String(kind)=="loops.json")if(auto xml=juce::parseXML(value.toString())){xml->setAttribute("file",target.getFullPathName());auto& keys=next->remote["keys.json"];if(!keys.isObject())keys=juce::var(new juce::DynamicObject());if(!keys.getDynamicObject()->hasProperty(target.getFullPathName()))keys.getDynamicObject()->setProperty(target.getFullPathName(),xml->getIntAttribute("loopKey",-1));value=xml->toString();}layer.getDynamicObject()->setProperty(target.getFullPathName(),value);}}
+   }else{
+    readOnly=true;remoteToken+=root.getFullPathName()+"|"+owner+"|"+fileStamp(file)+";";
+    auto doc=readDocument(file);if(!doc.isObject()||(int)doc.getProperty("version",0)!=2||doc.getProperty("owner",{}).toString()!=owner)continue;
+    auto fields=doc.getProperty("fields",{});if(!fields.isObject())continue;
+    for(auto kind:kinds){
+     checkpoint();auto values=fields.getProperty(kind,{});if(!values.isObject())continue;auto& layer=next->remote[kind];if(!layer.isObject())layer=juce::var(new juce::DynamicObject());
+     for(auto& item:values.getDynamicObject()->getProperties()){
+      checkpoint();auto path=item.name.toString();if(!relativeOK(path))continue;auto target=path=="."?root:root.getChildFile(path);auto value=item.value;
+      if(juce::String(kind)=="loops.json")if(auto xml=juce::parseXML(value.toString())){xml->setAttribute("file",target.getFullPathName());auto& keys=next->remote["keys.json"];if(!keys.isObject())keys=juce::var(new juce::DynamicObject());if(!keys.getDynamicObject()->hasProperty(target.getFullPathName()))keys.getDynamicObject()->setProperty(target.getFullPathName(),xml->getIntAttribute("loopKey",-1));value=xml->toString();}
+      layer.getDynamicObject()->setProperty(target.getFullPathName(),value);
+     }
+    }
    }
   }
-  if(any)for(auto kind:{"tags.json","keys.json","playback-types.json","loops.json","folder-colours.json"}){if(!local.count(kind))local[kind]=LibraryStore::readLocal(kind);auto merged=local[kind].clone();juce::Array<juce::Identifier> remove;for(auto& item:merged.getDynamicObject()->getProperties())for(auto& owner:next->owners)if(owner.second!=me&&inside(item.name.toString(),juce::File(owner.first))){remove.add(item.name);break;}for(auto id:remove)merged.getDynamicObject()->removeProperty(id);if(auto* remote=next->remote[kind].getDynamicObject())for(auto& item:remote->getProperties())merged.getDynamicObject()->setProperty(item.name,item.value);next->merged[kind]=merged;}
-  auto prior=std::atomic_load(&published);for(auto& item:prior->merged)if(!next->merged.count(item.first)){encoded.erase(item.first);LibraryStore::metadataChanged(item.first);}bool changed=prior->owners!=next->owners;for(auto& item:next->merged){auto text=juce::JSON::toString(item.second,true);if(encoded[item.first]!=text){encoded[item.first]=text;changed=true;LibraryStore::metadataChanged(item.first);}}
-  if(changed||prior->me!=me||prior->error!=next->error)std::atomic_store(&published,std::shared_ptr<const View>(next));
+  bool ownersChanged=prior->owners!=next->owners;std::vector<juce::String> changedKinds;
+  // Owner-only libraries read SQLite directly: there is no merged overlay to
+  // construct, clone, or stringify. Read-only overlays reuse unchanged layers.
+  if(readOnly)for(auto kind:kinds){
+   checkpoint();auto found=prior->merged.find(kind);
+   if(!ownersChanged&&remoteFingerprint==remoteToken&&revisions[kind]==serials[kind]&&found!=prior->merged.end()){next->merged[kind]=found->second;continue;}
+   Phase merging(phase,4);++mergePasses;auto source=getLocal(kind);juce::var merged(new juce::DynamicObject());
+   for(auto& item:source.getDynamicObject()->getProperties()){checkpoint();bool foreign=false;for(auto& entry:next->owners)if(entry.second!=me&&inside(item.name.toString(),juce::File(entry.first))){foreign=true;break;}if(!foreign)merged.getDynamicObject()->setProperty(item.name,item.value);}
+   if(auto* remote=next->remote[kind].getDynamicObject())for(auto& item:remote->getProperties()){checkpoint();merged.getDynamicObject()->setProperty(item.name,item.value);}
+   next->merged[kind]=merged;changedKinds.push_back(kind);
+  }
+  for(auto& item:prior->merged)if(!next->merged.count(item.first))changedKinds.push_back(item.first);
+  checkpoint();if(ownersChanged||!changedKinds.empty()||prior->me!=me||prior->error!=next->error)std::atomic_store(&published,std::shared_ptr<const View>(next));
+  for(auto kind:changedKinds)LibraryStore::metadataChanged(kind);
+  // Do not acknowledge a cancelled or failed scan: the next run retries it.
+  revisions=std::move(serials);remoteFingerprint=remoteToken;if(!retry)scanFingerprint=fingerprint;
  }
- void run()override{while(!threadShouldExit()){try{scan();}catch(const std::exception& e){std::cerr<<"Sharing: "<<e.what()<<"\n";}wake.wait(2000);}}
+ void run()override{while(!threadShouldExit()){try{scan();}catch(const Cancelled&){break;}catch(const std::exception& e){std::cerr<<"Sharing: "<<e.what()<<"\n";}if(!threadShouldExit())wake.wait(2000);}}
 public:
- OwnedLibrarySharing():Thread("Slice Groups Dropbox sharing"){startThread(juce::Thread::Priority::background);}
+ explicit OwnedLibrarySharing(bool start=true):Thread("Slice Groups Dropbox sharing"){if(start)startThread(juce::Thread::Priority::background);}
  ~OwnedLibrarySharing()override{signalThreadShouldExit();wake.signal();stopThread(-1);}
  static OwnedLibrarySharing& instance(){static auto* service=new OwnedLibrarySharing();return *service;}
  bool editable(juce::File file)const{auto view=std::atomic_load(&published);for(auto& owner:view->owners)if(owner.second!=view->me&&inside(file.getFullPathName(),juce::File(owner.first)))return false;return true;}
@@ -59,7 +134,7 @@ public:
    if(owner.isNotEmpty()&&owner!=me){bool localShared=false;for(auto kind:{"tags.json","keys.json","playback-types.json","loops.json","folder-colours.json"}){auto values=LibraryStore::readLocal(kind);for(auto& item:values.getDynamicObject()->getProperties())localShared|=inside(item.name.toString(),oldRoot);}if(localShared)throw std::runtime_error("The destination belongs to another owner. Choose the matching library.");}
    // Reject an empty/wrong folder when none of the known sample paths exist there.
    int known=0,present=0;auto saved=LibraryStore::savedKeySummary();for(auto& item:saved.getDynamicObject()->getProperties()){auto path=item.name.toString();if(inside(path,oldRoot)){++known;auto relative=juce::File(path).getRelativePathFrom(oldRoot);if(newRoot.getChildFile(relative).existsAsFile())++present;}}if(known&&present==0)throw std::runtime_error("No saved samples were found at that location. Choose the moved library folder itself.");
-   LibraryStore::database()->relocateLibrary(oldRoot,newRoot,owner==me?rootId:juce::String());LibraryStore::pollDatabase();scanFingerprint.clear();stamps.clear();encoded.clear();scan();wake.signal();return juce::Result::ok();
+   LibraryStore::database()->relocateLibrary(oldRoot,newRoot,owner==me?rootId:juce::String());LibraryStore::pollDatabase();scanFingerprint.clear();stamps.clear();documentStamps.clear();documents.clear();revisions.clear();remoteFingerprint.clear();scan();wake.signal();return juce::Result::ok();
   }catch(const std::exception& e){return juce::Result::fail(e.what());}}
  void refresh(){wake.signal();}
 };

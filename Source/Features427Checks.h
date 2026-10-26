@@ -1,0 +1,5 @@
+#pragma once
+int runFeatures427(){juce::ScopedJuceInitialiser_GUI gui;LibraryPreparation::checksPaused=true;try{
+ auto root=LibraryStore::root().getChildFile("Favourite files");root.createDirectory();juce::AudioBuffer<float> audio(1,4800);audio.clear();int identity=0;for(auto name:{"A.wav","B.wav","C.wav"}){audio.setSample(0,100,.01f*++identity);if(!writeRenderedAudio(root.getChildFile(name),audio,48000))throw std::runtime_error("fixture");}
+ Processor p(false);p.autoSave=false;Editor editor(p);editor.setSize(1400,1120);if(!editor.favourite427ForCheck(root))throw std::runtime_error("favourite shortcut selection/persistence");TrackShortcutsPanel panel;if(panel.getHeight()!=460||!panel.learningForCheck())throw std::runtime_error("shortcut learning/conflict transfer");std::cout<<"Favourite shortcut: selected single/bulk add and remove, loaded-file fallback, selection/audio preservation, typing guard, mapping persistence and conflict transfer passed\n";return 0;
+ }catch(const std::exception& e){std::cerr<<"FAIL: "<<e.what()<<"\n";return 4271;}}

@@ -61,3 +61,19 @@ extern "C" void* sg_scnet_create(const char* path,bool gpu,char* error,int count
 extern "C" void sg_scnet_destroy(void* instance){if(!instance)return;bool gpu=static_cast<Engine*>(instance)->device.is_mps();delete static_cast<Engine*>(instance);if(--instances==0&&gpu)at::detail::getMPSHooks().emptyCache();}
 extern "C" int sg_scnet_gpu(void* instance){return instance&&static_cast<Engine*>(instance)->device.is_mps();}
 extern "C" int sg_scnet_process(void* instance,const float* input,float* output,char* error,int count){try{if(!instance)throw std::runtime_error("SCNet is not loaded");static_cast<Engine*>(instance)->process(input,output);return 1;}catch(const std::exception& e){message(error,count,e.what());return 0;}}
+namespace {
+struct SimilarityEngine {
+ torch::jit::Module model;
+ explicit SimilarityEngine(const char* path):model(torch::jit::load(path,torch::kCPU)){model.eval();}
+ void process(const float* mono,float* output){
+  pthread_set_qos_class_self_np(QOS_CLASS_BACKGROUND,0);at::set_num_threads(1);c10::InferenceMode inference;
+  auto input=torch::from_blob(const_cast<float*>(mono),{1,480000},torch::TensorOptions().dtype(torch::kFloat32));
+  auto result=model.forward({input}).toTensor().contiguous();
+  if(result.numel()!=512||!torch::isfinite(result).all().item<bool>())throw std::runtime_error("Invalid similarity embedding");
+  std::memcpy(output,result.data_ptr<float>(),512*sizeof(float));
+ }
+};
+}
+extern "C" void* sg_similarity_create(const char* path,char* error,int count){try{pthread_set_qos_class_self_np(QOS_CLASS_BACKGROUND,0);at::set_num_threads(1);return new SimilarityEngine(path);}catch(const std::exception& e){message(error,count,e.what());return nullptr;}}
+extern "C" void sg_similarity_destroy(void* instance){delete static_cast<SimilarityEngine*>(instance);}
+extern "C" int sg_similarity_process(void* instance,const float* mono,float* output,char* error,int count){try{static_cast<SimilarityEngine*>(instance)->process(mono,output);return 1;}catch(const std::exception& e){message(error,count,e.what());return 0;}}

@@ -12,3 +12,5 @@ Dependency sources, runtime headers and upstream build instructions remain avail
 
 - Spotify Basic Pitch model and native decoder adaptation: Apache-2.0. Graph, license and attribution are in Resources/BasicPitch.onnx, BasicPitch-LICENSE.txt and BasicPitch-NOTICE.txt. Upstream: https://github.com/spotify/basic-pitch.
 - ONNX Runtime 1.26.0: MIT and component notices in Vendor/onnxruntime/LICENSE and ThirdPartyNotices.txt. Runtime and headers are in the v0.42.3 ONNX dependency add-on. Upstream source: https://github.com/microsoft/onnxruntime/tree/v1.26.0.
+
+- LAION CLAP audio-only model: Apache-2.0, laion/clap-htsat-unfused revision 8fa0f1c6d0433df6e97c127f64b2a1d6c0dcda8a. Native CPU conversion uses Hugging Face Transformers CLAP architecture/preprocessing (Apache-2.0). See Resources/DrumSimilarity-LICENSE.txt, DrumSimilarity-NOTICE.txt and tools/export-drum-similarity.py. Weights are a permanent v0.43.2 release asset.

@@ -942,3 +942,19 @@ int runExtraction4100(){juce::ScopedJuceInitialiser_GUI gui;LibraryPreparation::
 #include "Features422Checks.h"
 
 #include "Features423Checks.h"
+
+#include "Features424Checks.h"
+
+#include "Features425Checks.h"
+
+#include "Features426Checks.h"
+
+#include "Features427Checks.h"
+
+#include "Sharing428Checks.h"
+
+#include "Similarity430Checks.h"
+
+#include "Similarity431Checks.h"
+
+#include "Browser432Checks.h"

@@ -21,9 +21,17 @@ The full installer bundles stem models and the runtime. Lightweight updates reus
 
 ## Source
 
-The application source is readable in this repository. Use GitHub’s automatic source download for the current code. Download unchanged dependencies once from the permanent **0.40.2 Source.zip release asset**, which includes full dependency sources, headers, runtime libraries and model weights. MIDI extraction additionally needs the small ONNX dependency ZIP attached to v0.42.3. See BUILD.md and THIRD_PARTY.md for exact build steps.
+The application source is readable in this repository. Use GitHub’s automatic source download for the current code. Download unchanged dependencies once from the permanent **0.40.2 Source.zip release asset**, which includes full dependency sources, headers, runtime libraries and model weights. MIDI extraction additionally needs the small ONNX dependency ZIP attached to v0.42.3. Similarity weights are published once as DrumSimilarity.pt on v0.43.2. See BUILD.md and THIRD_PARTY.md for exact build steps.
 
 Slice Groups source is licensed under **AGPLv3-or-later**. Dependencies retain their own licenses.
+
+## New in 0.43.2
+
+- Local sound similarity: opt-in folder/file preparation, Drums and General Sound comparisons, reference-body matching and optional pitch tolerance. Prepared fingerprints and query variants are cached locally; CPU background processing, no audio upload. First pitch-tolerant search takes longer; warm searches reuse the cache.
+- Bulk file moves preserve the selection and metadata; drag onto a folder or choose Move to Folder. A confirmation protects removal of more than 200 tag assignments.
+- New Slice samples default to 80% transient detection; saved values are preserved.
+- Faster group switching, keyboard shortcuts for favourites/previous/next/trash, sequencer MIDI output, default transient slicing and bulk slice-detection settings.
+- Cooperative shutdown cancels pending metadata-sharing work safely.
 
 ## New in 0.42.3
 

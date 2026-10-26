@@ -101,8 +101,8 @@ public:
   {std::lock_guard<std::mutex> guard(cacheMutex);for(auto& pair:found)if(revisions[pair.first]!=pair.second){revisions[pair.first]=pair.second;snapshots.erase(pair.first);changed.push_back(pair.first);pendingNotifications.insert(pair.first);}}if(std::find(changed.begin(),changed.end(),juce::String("library-relocations.json"))!=changed.end())std::atomic_store(&pathRedirects,std::make_shared<const juce::var>(redirectMap(c)));return changed;
  }
  std::vector<juce::String> takeChanges(){poll();std::lock_guard<std::mutex> guard(cacheMutex);std::vector<juce::String> changes(pendingNotifications.begin(),pendingNotifications.end());pendingNotifications.clear();return changes;}
- juce::var snapshot(juce::String kind){poll();auto serial=revision(kind);{std::lock_guard<std::mutex> guard(cacheMutex);auto it=snapshots.find(kind);if(it!=snapshots.end()&&it->second.revision==serial)return it->second.value;}
-  auto value=empty();{Connection c(file,false);Statement s(c.db,kind=="loops.json"?"SELECT identity,xml FROM loops":"SELECT identity,value FROM metadata WHERE kind=?");if(kind!="loops.json")s.bind(1,kind);while(s.row())value.getDynamicObject()->setProperty(s.text(0),kind=="loops.json"?juce::var(s.text(1)):decodeValue(s.text(1)));}
+ juce::var snapshot(juce::String kind,std::function<void()> checkpoint={}){if(checkpoint)checkpoint();poll();auto serial=revision(kind);{std::lock_guard<std::mutex> guard(cacheMutex);auto it=snapshots.find(kind);if(it!=snapshots.end()&&it->second.revision==serial)return it->second.value;}
+  auto value=empty();{Connection c(file,false);Statement s(c.db,kind=="loops.json"?"SELECT identity,xml FROM loops":"SELECT identity,value FROM metadata WHERE kind=?");if(kind!="loops.json")s.bind(1,kind);while(s.row()){if(checkpoint)checkpoint();value.getDynamicObject()->setProperty(s.text(0),kind=="loops.json"?juce::var(s.text(1)):decodeValue(s.text(1)));}}
   {std::lock_guard<std::mutex> guard(cacheMutex);if(revisions[kind]==serial)snapshots[kind]={serial,value};}return value;
  }
  bool mutate(juce::String kind,std::function<void(juce::DynamicObject&)> change){MetadataGuard operation(*this);
