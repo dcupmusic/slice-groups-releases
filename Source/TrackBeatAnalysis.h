@@ -36,16 +36,17 @@ inline TrackGrid analyse(const AudioData& audio,double low,double high,const std
     std::vector<float> magnitude((size_t)frames*bins),percussive(magnitude.size());
     juce::dsp::FFT fft(10);std::array<float,fftSize*2> buffer{};std::array<float,fftSize> window{};
     for(int n=0;n<fftSize;++n)window[n]=.5f-.5f*std::cos(2*juce::MathConstants<double>::pi*n/fftSize);
-    for(int f=0;f<frames;++f){if((f%512)==0&&cancel&&cancel())return result;
-        if((f%128)==0){if(cancel&&cancel())return result;if(progress)progress(.08f+.3f*f/frames);}
-        buffer.fill(0);
-        for(int n=0;n<fftSize;++n){int sample=f*hop+n-fftSize/2;if(juce::isPositiveAndBelow(sample,(int)mono.size()))buffer[n]=mono[sample]*window[n];}
-        fft.performRealOnlyForwardTransform(buffer.data());
-        for(int k=0;k<bins;++k)magnitude[(size_t)f*bins+k]=std::hypot(buffer[k*2],buffer[k*2+1])/512.f;
-        auto* row=magnitude.data()+(size_t)f*bins;std::vector<float> initial;
-        for(int k=-8;k<=8;++k)initial.push_back(row[reflect(k,bins)]);
-        Median frequency(std::move(initial));
-        for(int k=0;k<bins;++k){percussive[(size_t)f*bins+k]=frequency.value();if(k+1<bins)frequency.advance(row[reflect(k-8,bins)],row[reflect(k+9,bins)]);}
+    constexpr int tileFrames=64;
+    std::vector<float> tileMagnitude((size_t)tileFrames*bins),tilePercussive(tileMagnitude.size());
+    for(int start=0;start<frames;start+=tileFrames){int count=juce::jmin(tileFrames,frames-start);
+      for(int local=0;local<count;++local){int f=start+local;if((f%128)==0){if(cancel&&cancel())return result;if(progress)progress(.08f+.3f*f/frames);}
+        buffer.fill(0);for(int n=0;n<fftSize;++n){int sample=f*hop+n-fftSize/2;if(juce::isPositiveAndBelow(sample,(int)mono.size()))buffer[n]=mono[sample]*window[n];}
+        fft.performRealOnlyForwardTransform(buffer.data());auto* row=tileMagnitude.data()+(size_t)local*bins;
+        for(int k=0;k<bins;++k)row[k]=std::hypot(buffer[k*2],buffer[k*2+1])/512.f;
+        std::vector<float> initial;initial.reserve(17);for(int k=-8;k<=8;++k)initial.push_back(row[reflect(k,bins)]);Median frequency(std::move(initial));
+        for(int k=0;k<bins;++k){tilePercussive[(size_t)local*bins+k]=frequency.value();if(k+1<bins)frequency.advance(row[reflect(k-8,bins)],row[reflect(k+9,bins)]);}
+      }
+      for(int k=0;k<bins;++k)for(int f=0;f<count;++f){magnitude[(size_t)k*frames+start+f]=tileMagnitude[(size_t)f*bins+k];percussive[(size_t)k*frames+start+f]=tilePercussive[(size_t)f*bins+k];}
     }
     mono.clear();mono.shrink_to_fit();
     std::array<std::vector<double>,4> bands;for(auto& band:bands)band.resize(frames);
@@ -57,12 +58,12 @@ inline TrackGrid analyse(const AudioData& audio,double low,double high,const std
         double frequency=k*analysisRate/fftSize;int band=-1;
         for(int b=0;b<4;++b)if(frequency>=edges[b]&&frequency<edges[b+1]){band=b;++counts[b];}
         int pitch=frequency>=70&&frequency<3000?((int)std::round(69+12*std::log2(frequency/440))+1200)%12:-1;
-        std::vector<float> initial;for(int f=-15;f<=15;++f)initial.push_back(magnitude[(size_t)reflect(f,frames)*bins+k]);
+        std::vector<float> initial;initial.reserve(31);for(int f=-15;f<=15;++f)initial.push_back(magnitude[(size_t)k*frames+reflect(f,frames)]);
         Median harmonic(std::move(initial));prefix[0]=0;
-        for(int f=0;f<frames;++f)prefix[f+1]=prefix[f]+magnitude[(size_t)f*bins+k];
+        for(int f=0;f<frames;++f)prefix[f+1]=prefix[f]+magnitude[(size_t)k*frames+f];
         double previous=0;
         for(int f=0;f<frames;++f){if((f%512)==0&&cancel&&cancel())return result;
-            float h=harmonic.value(),p=percussive[(size_t)f*bins+k],m=magnitude[(size_t)f*bins+k];
+            float h=harmonic.value(),p=percussive[(size_t)k*frames+f],m=magnitude[(size_t)k*frames+f];
             // Reflect-padding for the one-second whitening average matches the spectral median boundaries.
             int lo=f-50,hi=f+50;double total=prefix[juce::jmin(frames,hi+1)]-prefix[juce::jmax(0,lo)];
             if(lo<0)total+=prefix[-lo]-prefix[0];if(hi>=frames)total+=prefix[frames]-prefix[2*frames-hi-1];
@@ -70,7 +71,7 @@ inline TrackGrid analyse(const AudioData& audio,double low,double high,const std
             double whitened=std::log1p(percussion/scale*10);
             if(band>=0&&f>0)bands[band][f]+=juce::jmax(0.,whitened-previous);
             previous=whitened;if(pitch>=0)chroma[f][pitch]+=h;
-            if(f+1<frames)harmonic.advance(magnitude[(size_t)reflect(f-15,frames)*bins+k],magnitude[(size_t)reflect(f+16,frames)*bins+k]);
+            if(f+1<frames)harmonic.advance(magnitude[(size_t)k*frames+reflect(f-15,frames)],magnitude[(size_t)k*frames+reflect(f+16,frames)]);
         }
     }
     magnitude.clear();magnitude.shrink_to_fit();percussive.clear();percussive.shrink_to_fit();

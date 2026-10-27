@@ -41,7 +41,7 @@ public:
    auto cancel=[&]{if(threadShouldExit())return true;
     // Budget actual CPU work, not time spent descheduled. Never throttle an idle host.
     double worked=cpuTime()-sliceStart;
-    if(LibraryPreparation::playbackBusy()&&worked>=2){wake.wait(juce::jlimit(1,2,(int)std::ceil(worked*.5)));sliceStart=cpuTime();}
+    if(LibraryPreparation::playbackBusy()&&worked>=8){wake.wait(1);sliceStart=cpuTime();}
     else if(worked>=8){juce::Thread::yield();sliceStart=cpuTime();}
     return threadShouldExit();
    };
@@ -52,10 +52,10 @@ public:
      juce::AudioFormatManager formats;formats.registerBasicFormats();std::unique_ptr<juce::AudioFormatReader> reader(formats.createReaderFor(file));
      if(!reader||reader->lengthInSamples<=0||reader->lengthInSamples>=INT_MAX)error="Could not read audio (the file may not be downloaded locally)";
      else{
-      auto size=file.getSize();auto modified=file.getLastModificationTime();HashStream stream(file,cancel,[&](float v){progress(v*.1f,"Reading");});
+      auto size=file.getSize();auto modified=file.getLastModificationTime();auto prepared=LibraryStore::database()->metadataEntry("track-prepared-v1.json",file.getFullPathName());bool unchanged=(juce::int64)prepared.getProperty("size",-1)==size&&(juce::int64)prepared.getProperty("modified",-1)==modified.toMilliseconds()&&prepared.getProperty("hash",{}).toString().isNotEmpty();HashStream stream(file,cancel,[&](float v){progress(v*.1f,"Reading");});
       if(stream.stream.failedToOpen())error="Could not open the source file";
       else{
-       auto hash=juce::SHA256(stream).toHexString();auto cache=LibraryStore::root().getChildFile("track-analysis-v3").getChildFile(hash+".xml");TrackGrid grid;
+       auto hash=unchanged?prepared.getProperty("hash",{}).toString():juce::SHA256(stream).toHexString();auto cache=LibraryStore::root().getChildFile("track-analysis-v3").getChildFile(hash+".xml");TrackGrid grid;
        if(!cancel())ok=TrackAnalyser::loadCacheForFrames(cache,(int)reader->lengthInSamples,job.low,job.high,grid);
        if(!ok&&!cancel()){
         AudioData audio;audio.path=file.getFullPathName();audio.contentHash=hash;audio.rate=reader->sampleRate;audio.buffer.setSize(juce::jmin(2,(int)reader->numChannels),(int)reader->lengthInSamples);bool read=true;
@@ -66,7 +66,7 @@ public:
          else if(!threadShouldExit())error="No usable beat grid, or source file changed during analysis";
         }else if(!threadShouldExit())error="Could not finish reading the audio";
        }
-       if(ok&&!cancel())TrackAnalyser::markPrepared(file,hash);
+       if(ok&&(file.getSize()!=size||file.getLastModificationTime()!=modified)){ok=false;error="Source file changed during preparation";}if(ok&&!cancel()&&!unchanged)TrackAnalyser::markPrepared(file,hash);
       }
      }
     }

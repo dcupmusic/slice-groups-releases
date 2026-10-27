@@ -15,7 +15,7 @@ Requires an **Apple Silicon Mac running macOS 14 or later**.
 
 The installer and plug-in are **Developer ID signed and notarised by Apple**. A normal first-open confirmation may appear; no Terminal quarantine-removal command is required. The installer backs up an existing version and leaves samples, tags and settings untouched. New installs use the user's VST3 folder. Existing user or writable system installations are updated in place; duplicate installations are flagged before copying.
 
-For manual installation, right-click the installer app, choose Show Package Contents and copy `Contents/PlugIns/Slice Groups.vst3` to your existing VST3 location while the host is closed. Avoid duplicate user/system copies.
+For manual installation, right-click the installer app, choose Show Package Contents and copy `Contents/PlugIns/Slice Groups.vst3` to your existing VST3 location while the host is closed. Avoid duplicate user/system copies. If the existing system-wide plugin requires administrator access, use Finder to replace `/Library/Audio/Plug-Ins/VST3/Slice Groups.vst3` and enter your Mac administrator password when asked.
 
 The full installer bundles stem models and the runtime. Lightweight updates reuse installed models, downloading missing weights on first stem use. No Python installation is needed. Windows and Intel Mac builds are not included.
 
@@ -24,6 +24,14 @@ The full installer bundles stem models and the runtime. Lightweight updates reus
 The application source is readable in this repository. Use GitHub’s automatic source download for the current code. Download unchanged dependencies once from the permanent **0.40.2 Source.zip release asset**, which includes full dependency sources, headers, runtime libraries and model weights. MIDI extraction additionally needs the small ONNX dependency ZIP attached to v0.42.3. Similarity weights are published once as DrumSimilarity.pt on v0.43.2. See BUILD.md and THIRD_PARTY.md for exact build steps.
 
 Slice Groups source is licensed under **AGPLv3-or-later**. Dependencies retain their own licenses.
+
+## New in 0.46.3
+
+- Per-slice playback ends in milliseconds and end fades, with yellow waveform handles, multi-selection, reset and Undo. Fades reach zero on their last output frame, including resampled/pitched playback, timed cuts and generated Multi regions.
+- Editable Melodic Slices: adjust boundaries, review detected MIDI pitches or choose No note, audition browser/preset sounds, then explicitly Create Sequence. Creation restores full-keyboard Multi mapping and round-robin layers; Zones opens the mapping editor.
+- Minimise/maximise lower instrument parameters in every playback mode for a shorter browsing window. This view state is not stored in presets. Stretch → Slice or Melodic Slices starts transient detection.
+- Similarity feedback with thumbs up/down and Best Match. Improve Search learns a local ranking from feedback with progress/readiness indication; ratings remain visible.
+- Per-track saved grid adjustments, no cross-track nudge carry, and faster reusable track pre-analysis.
 
 ## New in 0.43.2
 

@@ -37,6 +37,10 @@ class SequencerEditor final:public juce::Component,public juce::FileDragAndDropT
  #include "SequencerExtractionMethods.h"
  void timerCallback()override{p.drainSequenceRecording();if(isShowing())sync();}
 public:
+ void restoreAuditionSound(juce::File file,juce::String xml){loadAuditionSound(file,xml);}
+ bool auditionPickerReady()const{return !patchLoading&&p.extractionPreviewInstrument!=nullptr;}
+ void startAuditionPicker(){beginSoundSelection();}
+ void confirmAuditionPicker(bool accept){finishSoundSelection(accept);}
  void chooseAuditionFromBrowser(juce::File file){beginSoundSelection();loadAuditionSound(file);}
  std::function<void(juce::String)> message;std::function<void(juce::File)> saved;std::function<void()> layoutChanged;std::function<void(bool)> browseSound;std::function<void()> soundSelectionFinished;std::function<void(juce::File)> instrumentTransferred;
  void extractLoop(){startExtraction();}

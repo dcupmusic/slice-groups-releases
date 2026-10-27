@@ -1,3 +1,10 @@
+int runClick463(const char*,const char*);
+int runFeatures462();
+int runMelodic460();
+int runSliceEnd451();
+int runSliceEnd450();
+int runGrid442();
+int runFeedback440();
 int runBrowser432();
 int runSimilarity431();
 int runSimilarity430();
@@ -137,6 +144,14 @@ int main(int argc,char** argv) {
     if(argc==4&&std::string(argv[1])=="--transient407-check")return runTransient407(argv[2],argv[3]);
     if(argc==3&&std::string(argv[1])=="--timing412-check")return runTiming412(argv[2]);
     if(argc==2&&std::string(argv[1])=="--preanalysis411-check")return runPreanalysis411();
+    if(argc==4&&std::string(argv[1])=="--click463-check")return runClick463(argv[2],argv[3]);
+    if(argc==2&&std::string(argv[1])=="--features462-check")return runFeatures462();
+    if(argc==2&&std::string(argv[1])=="--melodic460-check")return runMelodic460();
+    if(argc==2&&std::string(argv[1])=="--slice-end451-check")return runSliceEnd451();
+    if(argc==2&&std::string(argv[1])=="--slice-end450-check")return runSliceEnd450();
+    if(argc==2&&std::string(argv[1])=="--grid442-check")return runGrid442();
+    if(argc==2&&std::string(argv[1])=="--feedback441-check")return runFeedback440();
+    if(argc==2&&std::string(argv[1])=="--feedback440-check")return runFeedback440();
     if(argc==2&&std::string(argv[1])=="--browser432-check")return runBrowser432();
     if(argc==2&&std::string(argv[1])=="--similarity431-check")return runSimilarity431();
     if(argc==2&&std::string(argv[1])=="--similarity430-check")return runSimilarity430();
