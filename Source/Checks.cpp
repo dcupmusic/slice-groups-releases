@@ -1,3 +1,4 @@
+int runFeatures471();
 int runFeatures470();
 int runClick463(const char*,const char*);
 int runFeatures462();
@@ -146,6 +147,7 @@ int main(int argc,char** argv) {
     if(argc==3&&std::string(argv[1])=="--timing412-check")return runTiming412(argv[2]);
     if(argc==2&&std::string(argv[1])=="--preanalysis411-check")return runPreanalysis411();
     if(argc==4&&std::string(argv[1])=="--click463-check")return runClick463(argv[2],argv[3]);
+    if(argc==2&&std::string(argv[1])=="--features471-check")return runFeatures471();
     if(argc==2&&std::string(argv[1])=="--features470-check")return runFeatures470();
     if(argc==2&&std::string(argv[1])=="--features462-check")return runFeatures462();
     if(argc==2&&std::string(argv[1])=="--melodic460-check")return runMelodic460();

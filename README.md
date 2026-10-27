@@ -8,7 +8,7 @@ A macOS VST3 instrument for slicing loops, playing one-shots and multisamples, s
 
 Requires an **Apple Silicon Mac running macOS 14 or later**.
 
-1. Download **SliceGroups-0.47.0-AppleSilicon.pkg** from the latest release.
+1. Download **SliceGroups-0.47.1-AppleSilicon.pkg** from the latest release.
 2. Close Ableton and other audio hosts.
 3. Open the PKG and authorize installation when macOS asks.
 4. Reopen your host and rescan VST3 plug-ins if needed.
@@ -22,6 +22,13 @@ If you also have a duplicate personal copy in `~/Library/Audio/Plug-Ins/VST3`, r
 The application source is readable in this repository. Use GitHub’s automatic source download for the current code. Download unchanged dependencies once from the permanent **0.40.2 Source.zip release asset**, which includes full dependency sources, headers, runtime libraries and model weights. MIDI extraction additionally needs the small ONNX dependency ZIP attached to v0.42.3. Similarity weights are published once as DrumSimilarity.pt on v0.43.2. See BUILD.md and THIRD_PARTY.md for exact build steps.
 
 Slice Groups source is licensed under **AGPLv3-or-later**. Dependencies retain their own licenses.
+
+## New in 0.47.1
+
+- Key Lock and target-key controls are linked across the MIDI and waveform pages. Master Key shows its effective destination while preserving the local target; a missing Clip Key is indicated instead of guessed.
+- Melodic conversion preserves source key, Key Lock, target, transpose direction and manual pitch. Local Key Lock transposes the melody without changing its intervals or baking pitches into sample mappings. Timbre remains independent.
+- MIDI Out, Save, Save As and drag-out use effective melodic pitches and matching key metadata. Editable notes remain native; ordinary Slice exports retain their trigger notes. Key changes release old sequencer notes, and local Key Lock supports Undo and saved recall.
+- Minimize keeps the plugin window size and expands the file browser in all six modes. Expanding restores the browser allocation without resizing when there is room. The collapsed view still allows manual window resizing and is not stored in presets.
 
 ## New in 0.47.0
 
