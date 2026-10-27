@@ -1,4 +1,4 @@
-bool melodicSequenceCreated=false;bool melodicSliceMode=false,melodicAuditionEnabled=false;double melodicAuditionGainDb=-12;int melodicPreviewPitch=60,melodicAuditionNote=-1,melodicAuditionRemaining=0;juce::MidiBuffer melodicPreviewMidi;
+int melodicTimbre=0;bool melodicSequenceCreated=false;bool melodicSliceMode=false,melodicAuditionEnabled=false;double melodicAuditionGainDb=-12;int melodicPreviewPitch=60,melodicAuditionNote=-1,melodicAuditionRemaining=0;juce::MidiBuffer melodicPreviewMidi;
 // Included in Processor's public section. All clip edits use the engine lock.
 SequenceClip sequencePlayback;bool sequenceRenderedMono=false;bool sequenceRenderedQuantize=false;double sequenceSwingGrid=.25,sequenceRenderedSwing=-1,sequenceRenderedSwingGrid=-1;
 MidiExtractionSettings extractionOptions;bool extractionAuditionMono=false;bool sequenceAutoQuantize=false,extractionActive=false,extractionMidiAudition=false;double extractionBeats=0;juce::Image extractionSpectrogram;bool extractionPreviewActive=false;std::shared_ptr<Processor> extractionPreviewInstrument;std::shared_ptr<Processor> extractionInstrument;juce::String extractionInstrumentPath,extractionInstrumentXml;

@@ -1,5 +1,3 @@
-> **Recommended Mac installer:** Download the signed, notarized `.pkg` from the latest release. Close your audio host, open the PKG, and authorize installation. It installs the full VST3 and stem models for all users. The existing ZIP downloads remain available.
-
 # Slice Groups
 
 A macOS VST3 instrument for slicing loops, playing one-shots and multisamples, sequencing MIDI, and working with tracks and separated stems.
@@ -10,22 +8,29 @@ A macOS VST3 instrument for slicing loops, playing one-shots and multisamples, s
 
 Requires an **Apple Silicon Mac running macOS 14 or later**.
 
-1. Download **AppleSilicon-Update.zip** for an existing installation, or **AppleSilicon-Installer.zip** for a new/offline installation, and unzip it.
-2. Close Ableton or your other audio host.
-3. Open **Install Slice Groups.app**, confirm the host is closed, then click **Install**.
-4. Reopen the host and rescan VST3 plugins if needed. Add your sample folders inside Slice Groups.
+1. Download **SliceGroups-0.47.0-AppleSilicon.pkg** from the latest release.
+2. Close Ableton and other audio hosts.
+3. Open the PKG and authorize installation when macOS asks.
+4. Reopen your host and rescan VST3 plug-ins if needed.
 
-The installer and plug-in are **Developer ID signed and notarised by Apple**. A normal first-open confirmation may appear; no Terminal quarantine-removal command is required. The installer backs up an existing version and leaves samples, tags and settings untouched. New installs use the user's VST3 folder. Existing user or writable system installations are updated in place; duplicate installations are flagged before copying.
+The Developer ID signed, Apple-notarized PKG installs the full VST3 and stem models into `/Library/Audio/Plug-Ins/VST3/Slice Groups.vst3` for all users. It can replace an existing system installation with administrator authorization. Your samples, tags, presets and settings are preserved. No Python or model download is needed.
 
-For manual installation, right-click the installer app, choose Show Package Contents and copy `Contents/PlugIns/Slice Groups.vst3` to your existing VST3 location while the host is closed. Avoid duplicate user/system copies. If the existing system-wide plugin requires administrator access, use Finder to replace `/Library/Audio/Plug-Ins/VST3/Slice Groups.vst3` and enter your Mac administrator password when asked.
-
-The full installer bundles stem models and the runtime. Lightweight updates reuse installed models, downloading missing weights on first stem use. No Python installation is needed. Windows and Intel Mac builds are not included.
+If you also have a duplicate personal copy in `~/Library/Audio/Plug-Ins/VST3`, remove that duplicate before restarting your host. ZIP installers remain available on earlier releases. Windows and Intel Mac builds are not included.
 
 ## Source
 
 The application source is readable in this repository. Use GitHub’s automatic source download for the current code. Download unchanged dependencies once from the permanent **0.40.2 Source.zip release asset**, which includes full dependency sources, headers, runtime libraries and model weights. MIDI extraction additionally needs the small ONNX dependency ZIP attached to v0.42.3. Similarity weights are published once as DrumSimilarity.pt on v0.43.2. See BUILD.md and THIRD_PARTY.md for exact build steps.
 
 Slice Groups source is licensed under **AGPLv3-or-later**. Dependencies retain their own licenses.
+
+## New in 0.47.0
+
+- Folder Up/Down navigation updates the file list and keeps a single highlight; intentional multi-selection remains supported.
+- Option-drag copies notes or the selected notes in one Undo step. Option-click creates no copy; Command bypasses grid snapping.
+- The audition sound menu can save or clear a global default, including the sound configuration, gain and Mono/Poly. Default loading is asynchronous and respects existing choices.
+- Deleting a melodic sample zone preserves MIDI notes, clears its mapping references and supports Undo.
+- Melodic Multis have a bipolar Timbre knob (-24 to +24 semitones) beside Swing. It selects lower/higher sample zones with pitch compensation; notes and MIDI export remain unchanged. Timbre saves with the instrument and supports Undo.
+- Signed, notarized system-wide PKG installer with administrator authorization.
 
 ## New in 0.46.3
 
