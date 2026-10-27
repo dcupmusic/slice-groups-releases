@@ -1,3 +1,5 @@
+> **Recommended Mac installer:** Download the signed, notarized `.pkg` from the latest release. Close your audio host, open the PKG, and authorize installation. It installs the full VST3 and stem models for all users. The existing ZIP downloads remain available.
+
 # Slice Groups
 
 A macOS VST3 instrument for slicing loops, playing one-shots and multisamples, sequencing MIDI, and working with tracks and separated stems.
