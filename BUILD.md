@@ -1,4 +1,4 @@
-# Building 0.43.2
+# Building 0.49.0
 
 Use an Apple Silicon Mac with macOS 14+, Xcode command-line tools and CMake 3.22+. GitHub’s automatic source ZIP contains the current application source; the base dependencies from 0.40.2 are downloaded only once. MIDI extraction adds ONNX Runtime 1.26.0.
 

@@ -6,7 +6,7 @@
 class LoopLoader final : public juce::Thread {
  Processor& p;juce::CriticalSection queueLock;juce::WaitableEvent wake;juce::File next;uint64_t serial=0,warmSerial=0;juce::Array<juce::File> upcoming;juce::String warmSignature;
  bool canWarm(juce::File file){if(LibraryStore::playbackType(file)!=4||file.hasFileExtension("sfz;sgpreset"))return false;std::unique_ptr<juce::AudioFormatReader> reader(p.formats.createReaderFor(file));return reader&&reader->sampleRate>0&&reader->lengthInSamples/reader->sampleRate<=120&&(double)reader->lengthInSamples*reader->numChannels*4*1.15<=DecodedSampleCache::budget/3;}
- std::shared_ptr<const AudioData> readCached(juce::File file,std::function<bool()> cancel={}){if(auto data=DecodedSampleCache::instance().get(file))return data;auto modified=file.getLastModificationTime();auto size=file.getSize();auto data=p.readAudio(file,cancel);if(data&&(!cancel||!cancel()))DecodedSampleCache::instance().put(file,data,modified,size);return data;}
+ std::shared_ptr<const AudioData> readCached(juce::File file,std::function<bool()> cancel={}){if(!file.hasFileExtension("sfz;sgmulti"))if(auto data=DecodedSampleCache::instance().get(file))return data;auto modified=file.getLastModificationTime();auto size=file.getSize();auto data=p.readAudio(file,cancel);if(data&&!file.hasFileExtension("sfz;sgmulti")&&(!cancel||!cancel()))DecodedSampleCache::instance().put(file,data,modified,size);return data;}
 
 public:
  std::atomic<bool> busy{false};std::atomic<double> lastLoadMs{0};std::function<void(bool,juce::File,uint64_t)> completed;

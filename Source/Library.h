@@ -6,6 +6,7 @@
 #include <iostream>
 #include <juce_cryptography/juce_cryptography.h>
 #include "LocalDatabase.h"
+#include "MusicalKey.h"
 
 // Personal state stays local. Shared sample metadata lives below each library root. Test suites
 // can redirect storage into work/ without modifying the user's real library.
@@ -28,9 +29,9 @@ public:
     }
     static std::atomic<uint64_t>& metadataRevision(){static std::atomic<uint64_t> revision{1};return revision;}
     static std::atomic<uint64_t>& kindRevision(const juce::String& name){
-        static std::atomic<uint64_t> versions[10]{};
-        static const char* names[]{"loops.json","loop-index-v2.json","tags.json","keys.json","playback-types.json","favourites.json","track-prepared-v1.json","settings.json","folder-colours.json"};
-        for(int i=0;i<9;++i)if(name==names[i])return versions[i];return versions[9];
+        static std::atomic<uint64_t> versions[11]{};
+        static const char* names[]{"loops.json","loop-index-v2.json","tags.json","keys.json","playback-types.json","favourites.json","track-prepared-v1.json","settings.json","folder-colours.json","musical-keys.json"};
+        for(int i=0;i<10;++i)if(name==names[i])return versions[i];return versions[10];
     }
     static void metadataChanged(const juce::String& name){++kindRevision(name);++metadataRevision();}
     inline static std::atomic<int> diagnosticParseDelayMs{0};
@@ -56,7 +57,7 @@ public:
     static void notifySharing();
     static bool editable(juce::File);
     static juce::var sharedSnapshot(const juce::String&);
-    static bool sharedKind(const juce::String& name){return name=="tags.json"||name=="keys.json"||name=="loops.json"||name=="playback-types.json"||name=="folder-colours.json";}
+    static bool sharedKind(const juce::String& name){return name=="tags.json"||name=="keys.json"||name=="loops.json"||name=="playback-types.json"||name=="folder-colours.json"||name=="musical-keys.json";}
     static void mergeShared(const juce::String&,juce::var&);static void queueShared(const juce::String&,const juce::var&,const juce::var&);
     static juce::var read(const juce::String& name){auto value=readLocal(name);if(sharedKind(name))mergeShared(name,value);return value;}
     static juce::CriticalSection& updateLock(){static juce::CriticalSection mutex;return mutex;}
@@ -132,7 +133,13 @@ public:
         });return result;
     }
     static juce::String fingerprint(const juce::File& input){auto file=resolveFile(input);auto stream=file.createInputStream();return stream?juce::SHA256(*stream).toHexString():juce::String();}
-    static int fileKey(const juce::File& input,juce::String hash={}){auto file=resolveFile(input);auto keys=read("keys.json");auto* object=keys.getDynamicObject();auto path=file.getFullPathName();if(object->hasProperty(path))return juce::jlimit(-1,11,(int)object->getProperty(path));if(hash.isNotEmpty()&&object->hasProperty("sha256:"+hash))return juce::jlimit(-1,11,(int)object->getProperty("sha256:"+hash));return -2;}
+    static juce::var musicalKeySnapshot(){static juce::CriticalSection mutex;static juce::String path;static uint64_t seen=~uint64_t{};static juce::var cache;auto revision=kindRevision("musical-keys.json").load();const juce::ScopedLock guard(mutex);auto current=root().getFullPathName();if(path!=current||seen!=revision||!cache.isObject()){cache=read("musical-keys.json");path=current;seen=kindRevision("musical-keys.json").load();}return cache;}
+    static MusicalKey musicalKeyOverride(juce::File file){auto values=musicalKeySnapshot();return MusicalKey::read(values.getProperty(file.getFullPathName(),{}));}
+    static MusicalKey resolveMusicalKey(juce::File file,MusicalKey fallback={},bool midi=false){auto manual=musicalKeyOverride(file);if(manual.root!=-2)return manual;auto named=MusicalKey::filename(file.getFullPathName());if(midi&&named.known())return named;if(fallback.root!=-2)return {fallback.root,fallback.quality>=0?fallback.quality:(named.root==fallback.root?named.quality:-1)};return named;}
+    inline static std::atomic<int> musicalKeyWrites{0};
+    static bool setMusicalKeys(const juce::Array<juce::File>& files,MusicalKey key){for(auto file:files)if(!editable(file))return false;if(key.root==-2){std::vector<juce::String> identities;for(auto file:files){identities.push_back(file.getFullPathName());auto hash=fingerprint(file);if(hash.isNotEmpty())identities.push_back("sha256:"+hash);}if(!update("keys.json",[&](juce::DynamicObject& object){for(auto identity:identities)object.removeProperty(identity);}))return false;}return update("musical-keys.json",[&](juce::DynamicObject& object){for(auto file:files){if(key.root==-2)object.removeProperty(file.getFullPathName());else object.setProperty(file.getFullPathName(),key.value());}});}
+    static void queueMusicalKeys(juce::Array<juce::File> files,MusicalKey key,std::function<void(bool)> complete={}){static juce::ThreadPool pool{1};++musicalKeyWrites;pool.addJob([files,key,complete]{bool ok=setMusicalKeys(files,key);--musicalKeyWrites;if(complete)juce::MessageManager::callAsync([complete,ok]{complete(ok);});});}
+    static int fileKey(const juce::File& input,juce::String hash={}){auto file=resolveFile(input);auto musical=musicalKeyOverride(file);if(musical.root!=-2)return musical.root;auto keys=read("keys.json");auto* object=keys.getDynamicObject();auto path=file.getFullPathName();if(object->hasProperty(path))return juce::jlimit(-1,11,(int)object->getProperty(path));if(hash.isNotEmpty()&&object->hasProperty("sha256:"+hash))return juce::jlimit(-1,11,(int)object->getProperty("sha256:"+hash));return -2;}
     static bool setFileKey(const juce::File& input,int key,juce::String hash={}){auto file=resolveFile(input);if(hash.isEmpty())hash=fingerprint(file);key=juce::jlimit(-1,11,key);return update("keys.json",[&](juce::DynamicObject& object){object.setProperty(file.getFullPathName(),key);if(hash.isNotEmpty())object.setProperty("sha256:"+hash,key);});}
     static juce::File loopConfigFile(juce::String identity){return root().getChildFile("loop-configs-v2").getChildFile(juce::SHA256(identity.toRawUTF8(),identity.getNumBytesAsUTF8()).toHexString()+".xml");}
     static bool saveLoop(const juce::File& input,const juce::String& xml,juce::String hash={}){auto file=resolveFile(input);

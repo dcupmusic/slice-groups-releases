@@ -8,7 +8,7 @@ A macOS VST3 instrument for slicing loops, playing one-shots and multisamples, s
 
 Requires an **Apple Silicon Mac running macOS 14 or later**.
 
-1. Download **SliceGroups-0.47.1-AppleSilicon.pkg** from the latest release.
+1. Download **SliceGroups-0.49.0-AppleSilicon.pkg** from the latest release.
 2. Close Ableton and other audio hosts.
 3. Open the PKG and authorize installation when macOS asks.
 4. Reopen your host and rescan VST3 plug-ins if needed.
@@ -22,6 +22,25 @@ If you also have a duplicate personal copy in `~/Library/Audio/Plug-Ins/VST3`, r
 The application source is readable in this repository. Use GitHub’s automatic source download for the current code. Download unchanged dependencies once from the permanent **0.40.2 Source.zip release asset**, which includes full dependency sources, headers, runtime libraries and model weights. MIDI extraction additionally needs the small ONNX dependency ZIP attached to v0.42.3. Similarity weights are published once as DrumSimilarity.pt on v0.43.2. See BUILD.md and THIRD_PARTY.md for exact build steps.
 
 Slice Groups source is licensed under **AGPLv3-or-later**. Dependencies retain their own licenses.
+
+## New in 0.49.0
+
+- MIDI filename keys (including major/minor) take precedence over embedded key signatures and note inference. Explicit library edits take precedence over detection.
+- Audio and MIDI browser key editing supports root, major/minor, Unknown and Use Detected, including bulk editing. MIDI browser and Clip Key use one shared key lookup and manual metadata.
+- Fixed Clip Key selections reverting during asynchronous dropdown notifications. Key edits support Undo and saved recall; metadata writes run in the background.
+- Saving transposed MIDI adopts the actual saved notes and key, avoiding a second transposition or swing pass. Finishing a save cannot replace a subsequently loaded clip.
+- Right-click a group number to copy its sound, mode, edits and sequence to another group. Destination MIDI channel, output, volume, mute and solo remain unchanged. Group replacement supports Undo/Redo, including empty slots and Track playback ownership. Copies share immutable decoded audio with independent editable state.
+- With zone Audition enabled, each left-list row click retriggers the selected zone, including repeated clicks on the same row. Prior preview voices stop, Audition stays enabled, and refresh/trash actions do not trigger sound.
+
+
+## New in 0.48.0
+
+- Mono + Legato keeps active sample layers and their envelopes, loops and playback position across overlapping notes, including octave changes.
+- SFZ/native Multi loading skips musical analysis and reuses decoded samples with a 128 MiB bounded cache. Waveform preparation runs separately in the background.
+- SFZ and unsaved Multi autosave uses local `multi-edits` storage; original SFZ/audio files stay unchanged. Save Multi creates a native instrument on first save and asynchronously overwrites it afterward. Save Multi As creates a separate instrument.
+- Sequencer length offers Bars or Beats, including one-, two- and three-beat loops. MIDI export preserves exact duration.
+- Large tag-removal confirmations name the tag. Search tag text opens Include/Exclude; only the right X removes it, and changing polarity preserves typed keywords.
+
 
 ## New in 0.47.1
 
