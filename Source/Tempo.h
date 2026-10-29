@@ -3,6 +3,8 @@
 #include <regex>
 #include <vector>
 
+inline double halvedBpmEven(double bpm){return juce::jlimit(20.,400.,2*std::ceil(bpm/4-1e-9));}
+
 struct LoopTiming {
     double bpm = 120, beats = 4, bars = 1;
     juce::String method = "Estimated";

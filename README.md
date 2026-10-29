@@ -8,12 +8,12 @@ A macOS VST3 instrument for slicing loops, playing one-shots and multisamples, s
 
 Requires an **Apple Silicon Mac running macOS 14 or later**.
 
-1. Download **SliceGroups-0.50.1-AppleSilicon.pkg** from the latest release.
+1. Download **SliceGroups-0.50.5-AppleSilicon.pkg** from the latest release.
 2. Close Ableton and other audio hosts.
 3. Open the PKG and authorize installation when macOS asks.
 4. Reopen your host and rescan VST3 plug-ins if needed.
 
-The Developer ID signed, Apple-notarized PKG installs the full VST3 and stem models into `/Library/Audio/Plug-Ins/VST3/Slice Groups.vst3` for all users. It can replace an existing system installation with administrator authorization. Your samples, tags, presets and settings are preserved. No Python or model download is needed.
+The Developer ID signed PKG installs the full VST3 and stem models into `/Library/Audio/Plug-Ins/VST3/Slice Groups.vst3` for all users. It can replace an existing system installation with administrator authorization. Your samples, tags, presets and settings are preserved. No Python or model download is needed.
 
 If you also have a duplicate personal copy in `~/Library/Audio/Plug-Ins/VST3`, remove that duplicate before restarting your host. ZIP installers remain available on earlier releases. Windows and Intel Mac builds are not included.
 
@@ -22,6 +22,13 @@ If you also have a duplicate personal copy in `~/Library/Audio/Plug-Ins/VST3`, r
 The application source is readable in this repository. Use GitHub’s automatic source download for the current code. Download unchanged dependencies once from the permanent **0.40.2 Source.zip release asset**, which includes full dependency sources, headers, runtime libraries and model weights. MIDI extraction additionally needs the small ONNX dependency ZIP attached to v0.42.3. Similarity weights are published once as DrumSimilarity.pt on v0.43.2. See BUILD.md and THIRD_PARTY.md for exact build steps.
 
 Slice Groups source is licensed under **AGPLv3-or-later**. Dependencies retain their own licenses.
+
+## New in 0.50.5
+
+- Fixed Option-click slice insertion; FX anchor placement uses Option+Shift-click.
+- Dynamic stems pitch fix, Slice FX scheduling with MIDI Gate, power-of-two bar scaling, keyboard warning controls, Anchor Bar and Bars column.
+- Faster tag display while Bars metadata updates in the background.
+- This release is signed but not notarized; macOS may require approval in Privacy & Security.
 
 ## New in 0.50.1
 

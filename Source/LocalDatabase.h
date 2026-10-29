@@ -7,6 +7,8 @@
 #include <unistd.h>
 #include <stdexcept>
 
+inline bool metadataValuesEqual503(const juce::var& a,const juce::var& b){return a==b||((a.isObject()||a.isArray())&&(b.isObject()||b.isArray())&&juce::JSON::toString(a,false)==juce::JSON::toString(b,false));}
+
 // One database per local library. SQLite WAL keeps readers independent of writers.
 // Bulk metadata snapshots are immutable; sample recall and saves are point queries.
 class LocalDatabase {
@@ -112,7 +114,8 @@ public:
   std::shared_ptr<std::mutex> ns;{std::lock_guard<std::mutex> guard(cacheMutex);auto& ptr=namespaceLocks[kind];if(!ptr)ptr=std::make_shared<std::mutex>();ns=ptr;}std::lock_guard<std::mutex> namespaceGuard(*ns);
   juce::InterProcessLock exclusive("SliceGroupsDatabaseMetadata-"+juce::String((folder.getFullPathName()+kind).hashCode64()));if(!exclusive.enter(1000))return false;
   try{poll(true);auto before=snapshot(kind),after=before.clone();change(*after.getDynamicObject());{Connection c(file,false);normalise(*after.getDynamicObject(),kind,redirectMap(c));}std::vector<std::pair<juce::String,juce::var>> changed;std::vector<juce::String> removed;
-   for(auto& p:after.getDynamicObject()->getProperties())if(!before.getDynamicObject()->hasProperty(p.name)||before.getDynamicObject()->getProperty(p.name)!=p.value)changed.push_back({p.name.toString(),p.value});for(auto& p:before.getDynamicObject()->getProperties())if(!after.getDynamicObject()->hasProperty(p.name))removed.push_back(p.name.toString());
+   std::map<juce::String,juce::var> previous;for(auto& p:before.getDynamicObject()->getProperties())previous.emplace(p.name.toString(),p.value);
+   for(auto& p:after.getDynamicObject()->getProperties()){auto key=p.name.toString();auto found=previous.find(key);if(found==previous.end()||!metadataValuesEqual503(found->second,p.value))changed.push_back({key,p.value});if(found!=previous.end())previous.erase(found);}for(auto& p:previous)removed.push_back(p.first);
    if(changed.empty()&&removed.empty()){exclusive.exit();return true;}
    {std::lock_guard<std::mutex> guard(writeMutex);Connection c(file);c.exec("BEGIN IMMEDIATE");try{for(auto& p:changed)if(kind=="loops.json")putLoop(c,p.first,p.second.toString());else putMetadata(c,kind,p.first,p.second);for(auto key:removed){Statement s(c.db,kind=="loops.json"?"DELETE FROM loops WHERE identity=?":"DELETE FROM metadata WHERE identity=? AND kind=?");s.bind(1,key);if(kind!="loops.json")s.bind(2,kind);s.run();}bump(c,kind);c.exec("COMMIT");}catch(...){c.exec("ROLLBACK");throw;}}
    invalidate(kind);poll(true);
@@ -156,6 +159,8 @@ public:
  }
  bool restoreLoopEntries(const std::map<juce::String,juce::String>& entries){MetadataGuard operation(*this);std::lock_guard<std::mutex> guard(writeMutex);Connection c(file);c.exec("BEGIN IMMEDIATE");try{for(auto& pair:entries){if(pair.second.isEmpty()){Statement remove(c.db,"DELETE FROM loops WHERE identity=?");remove.bind(1,pair.first);remove.run();}else putLoop(c,pair.first,pair.second);}bump(c,"loops.json");c.exec("COMMIT");}catch(...){c.exec("ROLLBACK");throw;}invalidate("loops.json");return true;}
  bool saveLoop(juce::String path,juce::String hash,juce::String xml){MetadataGuard operation(*this);{Connection c(file,false);auto redirects=redirectMap(c);path=resolve(path,redirects);if(auto parsed=juce::parseXML(xml)){rewriteXml(*parsed,[&](auto p){return resolve(p,redirects);});xml=parsed->toString();}}std::lock_guard<std::mutex> guard(writeMutex);Connection c(file);c.exec("BEGIN IMMEDIATE");try{putLoop(c,path,xml);if(hash.isNotEmpty())putLoop(c,"sha256:"+hash,xml);bump(c,"loops.json");c.exec("COMMIT");}catch(...){c.exec("ROLLBACK");throw;}invalidate("loops.json");return true;}
+ // Indexed readers avoid constructing or linearly searching a DynamicObject.
+ std::map<juce::String,juce::var> indexedMetadata(juce::String kind,std::function<void()> checkpoint={}){std::map<juce::String,juce::var> values;Connection c(file,false);Statement rows(c.db,kind=="loops.json"?"SELECT identity,xml FROM loops WHERE identity LIKE '/%'":"SELECT identity,value FROM metadata WHERE kind=?");if(kind!="loops.json")rows.bind(1,kind);int count=0;while(rows.row()){if(checkpoint&&++count%256==0)checkpoint();values.emplace(rows.text(0),kind=="loops.json"?juce::var(rows.text(1)):decodeValue(rows.text(1)));}return values;}
  juce::String loop(juce::String identity){Connection c(file,false);Statement s(c.db,"SELECT xml FROM loops WHERE identity=?");s.bind(1,identity);return s.row()?s.text(0):juce::String();}
  juce::var savedKeys(){auto value=empty();Connection c(file,false);Statement s(c.db,"SELECT identity,musical_key FROM loops WHERE identity LIKE '/%'");while(s.row())value.getDynamicObject()->setProperty(s.text(0),(int)s.number(1));return value;}
  bool hasCatalog(juce::File root){Connection c(file,false);Statement s(c.db,"SELECT 1 FROM catalog_roots WHERE root=?");s.bind(1,root.getFullPathName());return s.row();}

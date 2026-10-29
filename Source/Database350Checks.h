@@ -3,7 +3,8 @@ int runDatabaseMigration(){
  try{auto db=LibraryStore::database();if(db->integrity()!="ok")return 1;auto loops=LibraryStore::savedKeySummary();std::cout<<"SQLite migration/verification OK; "<<loops.getDynamicObject()->getProperties().size()<<" saved paths; database "<<LibraryStore::root().getChildFile("library.db").getFullPathName()<<"\n";return 0;}catch(const std::exception& e){std::cerr<<e.what()<<"\n";return 1;}
 }
 int runDatabase350Checks(){
- juce::ScopedJuceInitialiser_GUI gui;auto root=LibraryStore::root();root.createDirectory();auto sample=root.getChildFile("sample.wav");sample.replaceWithText("fixture audio");auto hash=LibraryStore::fingerprint(sample);
+ juce::ScopedJuceInitialiser_GUI gui;auto root=LibraryStore::root();root.createDirectory();auto sample=root.getChildFile("sample.wav");sample.replaceWithText("fixture audio");// Hash fixture bytes without resolving paths: resolution opens SQLite, which must happen only after legacy fixtures are written.
+ auto fixtureStream=sample.createInputStream();auto hash=juce::SHA256(*fixtureStream).toHexString();
  auto old=juce::var(new juce::DynamicObject());juce::XmlElement config("SliceGroups");config.setAttribute("loopKey",2);config.setAttribute("contentHash",hash);config.setAttribute("trimStart",123);config.setAttribute("trimEnd",456);auto original=config.toString();old.getDynamicObject()->setProperty(sample.getFullPathName(),original);old.getDynamicObject()->setProperty("sha256:"+hash,original);root.getChildFile("loops.json").replaceWithText(juce::JSON::toString(old));
  auto index=juce::var(new juce::DynamicObject());index.getDynamicObject()->setProperty(sample.getFullPathName(),8);auto another=root.getChildFile("v2-only.wav");index.getDynamicObject()->setProperty(another.getFullPathName(),5);root.getChildFile("loop-index-v2.json").replaceWithText(juce::JSON::toString(index));
  for(auto file:{sample,another}){auto path=LibraryStore::loopConfigFile("path:"+file.getFullPathName());path.getParentDirectory().createDirectory();config.setAttribute("loopKey",file==sample?8:5);config.setAttribute("contentHash",file==sample?hash:"v2-only-hash");path.replaceWithText(config.toString());}
@@ -32,7 +33,7 @@ int runDatabase350Checks(){
  FileTrashWorker trash;int callbacks=0;bool failure=false;trash.setCompleted([&](juce::Array<juce::File>,juce::Array<juce::File> failed,bool){++callbacks;failure=!failed.isEmpty();});
  auto wait=[&](auto predicate){auto deadline=juce::Time::getMillisecondCounterHiRes()+5000;while(!predicate()&&juce::Time::getMillisecondCounterHiRes()<deadline)CFRunLoopRunInMode(kCFRunLoopDefaultMode,.005,true);return predicate();};
  trash.request({trashFolder});if(!wait([&]{return callbacks==1;})||failure||child.existsAsFile()||BrowserSearchIndex::cached(root).contains(child))return 3519;
- if(!trash.undoRedo(false)||!wait([&]{return callbacks==2;})||failure||child.loadFileAsString()!="restore fixture"||BrowserSearchIndex::indexExists(root))return 3520;
+ if(!trash.undoRedo(false)||!wait([&]{return callbacks==2;})||failure||child.loadFileAsString()!="restore fixture"||!BrowserSearchIndex::indexExists(root)||!BrowserSearchIndex::cached(root).contains(child))return 3520;
  std::cout<<"Folder Trash undo and SQLite browser index prune/invalidation passed\n";
 
  auto big=root.getChildFile("large-catalog");juce::Array<juce::File> many;for(int n=0;n<20000;++n)many.add(big.getChildFile("sample_"+juce::String(n)+".wav"));db->setCatalog(big,{sample});std::atomic<bool> indexing{true};juce::String indexError;

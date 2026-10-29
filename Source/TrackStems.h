@@ -29,6 +29,7 @@ public:
 };
 
 class TrackStemWorker final:public juce::Thread {
+ friend int runFeatures504();
 public:
  static constexpr double rate=44100;static constexpr int chunkSize=2048,maxChunks=2048;
  struct Source{std::shared_ptr<const juce::AudioBuffer<float>> buffer;double sourceRate=44100;};
