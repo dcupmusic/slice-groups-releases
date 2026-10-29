@@ -8,7 +8,7 @@ A macOS VST3 instrument for slicing loops, playing one-shots and multisamples, s
 
 Requires an **Apple Silicon Mac running macOS 14 or later**.
 
-1. Download **SliceGroups-0.49.0-AppleSilicon.pkg** from the latest release.
+1. Download **SliceGroups-0.50.1-AppleSilicon.pkg** from the latest release.
 2. Close Ableton and other audio hosts.
 3. Open the PKG and authorize installation when macOS asks.
 4. Reopen your host and rescan VST3 plug-ins if needed.
@@ -22,6 +22,23 @@ If you also have a duplicate personal copy in `~/Library/Audio/Plug-Ins/VST3`, r
 The application source is readable in this repository. Use GitHub’s automatic source download for the current code. Download unchanged dependencies once from the permanent **0.40.2 Source.zip release asset**, which includes full dependency sources, headers, runtime libraries and model weights. MIDI extraction additionally needs the small ONNX dependency ZIP attached to v0.42.3. Similarity weights are published once as DrumSimilarity.pt on v0.43.2. See BUILD.md and THIRD_PARTY.md for exact build steps.
 
 Slice Groups source is licensed under **AGPLv3-or-later**. Dependencies retain their own licenses.
+
+## New in 0.50.1
+
+- Multi-file selection keeps the normal mode controls, layout and units. The waveform shows the selection count; unsupported actions are hidden. Existing controls edit all selected files with Mixed states, background saves and Undo.
+- MIDI Gate buttons show each group’s Ableton trigger note: C-2 through G-2.
+- Bulk editing follows the selected files’ playback type even with Auto Load off, without replacing the playing sound.
+
+## New in 0.50.0
+
+- FX Anchor supports multiple editable, individually sized Project Bar boxes, with add/remove controls and project-state/Undo support. Positions stay with the group while browsing samples.
+- MIDI Gate enables normal synced playback while each group’s assigned MIDI note (0–7) is held. Adjacent notes keep longer phrases moving without restarting. Gate and FX Anchor are mutually exclusive; One Shot and sequencer playback retain normal note routing.
+- Track Auto Cue: on loads the next Track in the same folder paused; off prepares and starts it at the next project bar boundary. Other file types are skipped, active loops remain loops, and the final track stops the group.
+- Track DB −1 / DB +1 shifts the downbeat assignment by exactly one beat while preserving BPM, beat timing, playhead sample and active loop audio region. Supports Undo and saved track recall.
+- Dynamic/Straight dropdown no longer loses selections to periodic UI refresh. Pending Straight analysis is identified in the control tooltip.
+- Bar half/double controls round down to whole even values, with a one-bar minimum. Escape commits numeric edits and removes focus like Enter, including slider text fields.
+- New Multis default to 250 ms release. Fresh Note Harvest SFZ imports use 250 ms rather than the generated recording-tail release; explicit releases from other SFZs and existing saved edits remain respected.
+
 
 ## New in 0.49.0
 

@@ -1,9 +1,10 @@
 #pragma once
 #include <juce_audio_utils/juce_audio_utils.h>
+struct NumericEscapeCommit:juce::KeyListener{bool keyPressed(const juce::KeyPress& key,juce::Component* origin)override{if(key.getKeyCode()!=juce::KeyPress::escapeKey&&key.getKeyCode()!=juce::KeyPress::returnKey)return false;if(auto* label=origin->findParentComponentOfClass<juce::Label>()){auto* input=dynamic_cast<juce::TextEditor*>(origin);bool empty=input&&!input->getText().containsAnyOf("0123456789");if(!empty&&key.getKeyCode()==juce::KeyPress::returnKey)return false;label->hideEditor(empty);label->giveAwayKeyboardFocus();return true;}return false;}static NumericEscapeCommit& instance(){static NumericEscapeCommit listener;return listener;}};
 struct NumericInputFilter:juce::TextEditor::InputFilter {
  static bool valid(juce::String text,bool complete=false){text=text.trim();bool digit=false,decimal=false;int i=0;for(auto c:text){if((c=='-'||c=='+')&&i==0){}else if(c=='.'&&!decimal)decimal=true;else if(c>='0'&&c<='9')digit=true;else return false;++i;}return !complete||digit;}
  juce::String filterNewText(juce::TextEditor& editor,const juce::String& input)override{if(input.isEmpty())return input;auto range=editor.getHighlightedRegion();auto candidate=editor.getText().replaceSection(range.getStart(),range.getLength(),input);return candidate.length()<=32&&valid(candidate)?input:editor.getHighlightedText();}
- static juce::Label* sliderLabel(juce::Label* label){auto before=label->onEditorShow;label->onEditorShow=[label,before]{if(before)before();if(auto* input=label->getCurrentTextEditor()){input->setText(input->getText().retainCharacters("0123456789.-+"),false);input->setInputFilter(new NumericInputFilter(),true);input->selectAll();}};return label;}
+ static juce::Label* sliderLabel(juce::Label* label){auto before=label->onEditorShow;label->onEditorShow=[label,before]{if(before)before();if(auto* input=label->getCurrentTextEditor()){input->setText(input->getText().retainCharacters("0123456789.-+"),false);input->setInputFilter(new NumericInputFilter(),true);input->addKeyListener(&NumericEscapeCommit::instance());input->selectAll();}};return label;}
 };
 namespace palette {
 inline juce::Colour bg() { return juce::Colour(0xff242424); }
@@ -31,6 +32,7 @@ public:
         g.setColour(on ? palette::accent().brighter(.3f) : juce::Colours::white.withAlpha(isEnabled() ? .88f : .3f));
         if (pressed) g.setColour(palette::accent().brighter(.2f));
         auto line = [&](float x1,float y1,float x2,float y2) { g.drawLine(x1,y1,x2,y2,1.6f); };
+        if((bool)getProperties().getWithDefault("bulkMixed",false)){g.drawLine(bounds.getCentreX()-4,bounds.getBottom()-3,bounds.getCentreX()+4,bounds.getBottom()-3,2);}
         switch (icon) {
             case Icon::Trash: line(x,y+h*.2f,x+w,y+h*.2f);line(x+w*.3f,y,x+w*.7f,y);g.drawRect(x+w*.15f,y+h*.25f,w*.7f,h*.75f,1.4f);line(x+w*.4f,y+h*.4f,x+w*.4f,y+h*.85f);line(x+w*.6f,y+h*.4f,x+w*.6f,y+h*.85f);break;
             case Icon::Lock: g.drawRect(x,y+h*.4f,w,h*.6f,1.4f);g.drawRoundedRectangle(x+w*.2f,y,w*.6f,h*.6f,3,1.4f);break;
@@ -105,3 +107,5 @@ public:explicit ZoomBar(bool isVertical=false):vertical(isVertical){}
 };
 
 class SquareLook:public juce::LookAndFeel_V4{public:juce::Label* createSliderTextBox(juce::Slider& slider)override{return NumericInputFilter::sliderLabel(juce::LookAndFeel_V4::createSliderTextBox(slider));}void drawButtonText(juce::Graphics& g,juce::TextButton& b,bool hover,bool down)override{if(b.getButtonText()=="M"||b.getButtonText()=="S"){g.setColour(b.findColour(b.getToggleState()?juce::TextButton::textColourOnId:juce::TextButton::textColourOffId));g.setFont(10);g.drawText(b.getButtonText(),b.getLocalBounds().reduced(1),juce::Justification::centred,false);}else juce::LookAndFeel_V4::drawButtonText(g,b,hover,down);}void drawComboBox(juce::Graphics& g,int width,int height,bool,int,int,int,int,juce::ComboBox& box)override{g.setColour(box.findColour(juce::ComboBox::backgroundColourId));g.fillRect(0,0,width,height);g.setColour(box.findColour(juce::ComboBox::outlineColourId));g.drawRect(0,0,width,height);juce::Path arrow;float x=width-13.f,y=height*.5f;arrow.startNewSubPath(x-4,y-2);arrow.lineTo(x,y+2);arrow.lineTo(x+4,y-2);g.setColour(box.findColour(juce::ComboBox::textColourId));g.strokePath(arrow,juce::PathStrokeType(1.5f));}void drawButtonBackground(juce::Graphics& g,juce::Button& b,const juce::Colour& c,bool hover,bool down)override{g.setColour(hover||down?c.brighter(.1f):c);g.fillRect(b.getLocalBounds());g.setColour(juce::Colour(0xff555555));g.drawRect(b.getLocalBounds());}};
+
+inline double wholeEvenBars(double bars,double factor){return juce::jmax(1.,std::floor(bars*factor/2.+1e-9)*2.);}

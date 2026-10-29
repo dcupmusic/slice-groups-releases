@@ -29,9 +29,9 @@ public:
     }
     static std::atomic<uint64_t>& metadataRevision(){static std::atomic<uint64_t> revision{1};return revision;}
     static std::atomic<uint64_t>& kindRevision(const juce::String& name){
-        static std::atomic<uint64_t> versions[11]{};
-        static const char* names[]{"loops.json","loop-index-v2.json","tags.json","keys.json","playback-types.json","favourites.json","track-prepared-v1.json","settings.json","folder-colours.json","musical-keys.json"};
-        for(int i=0;i<10;++i)if(name==names[i])return versions[i];return versions[10];
+        static std::atomic<uint64_t> versions[12]{};
+        static const char* names[]{"loops.json","loop-index-v2.json","tags.json","keys.json","playback-types.json","favourites.json","track-prepared-v1.json","settings.json","folder-colours.json","musical-keys.json","parameter-edits.json"};
+        for(int i=0;i<11;++i)if(name==names[i])return versions[i];return versions[11];
     }
     static void metadataChanged(const juce::String& name){++kindRevision(name);++metadataRevision();}
     inline static std::atomic<int> diagnosticParseDelayMs{0};
@@ -57,7 +57,7 @@ public:
     static void notifySharing();
     static bool editable(juce::File);
     static juce::var sharedSnapshot(const juce::String&);
-    static bool sharedKind(const juce::String& name){return name=="tags.json"||name=="keys.json"||name=="loops.json"||name=="playback-types.json"||name=="folder-colours.json"||name=="musical-keys.json";}
+    static bool sharedKind(const juce::String& name){return name=="tags.json"||name=="keys.json"||name=="loops.json"||name=="playback-types.json"||name=="folder-colours.json"||name=="musical-keys.json"||name=="parameter-edits.json";}
     static void mergeShared(const juce::String&,juce::var&);static void queueShared(const juce::String&,const juce::var&,const juce::var&);
     static juce::var read(const juce::String& name){auto value=readLocal(name);if(sharedKind(name))mergeShared(name,value);return value;}
     static juce::CriticalSection& updateLock(){static juce::CriticalSection mutex;return mutex;}
@@ -143,7 +143,7 @@ public:
     static bool setFileKey(const juce::File& input,int key,juce::String hash={}){auto file=resolveFile(input);if(hash.isEmpty())hash=fingerprint(file);key=juce::jlimit(-1,11,key);return update("keys.json",[&](juce::DynamicObject& object){object.setProperty(file.getFullPathName(),key);if(hash.isNotEmpty())object.setProperty("sha256:"+hash,key);});}
     static juce::File loopConfigFile(juce::String identity){return root().getChildFile("loop-configs-v2").getChildFile(juce::SHA256(identity.toRawUTF8(),identity.getNumBytesAsUTF8()).toHexString()+".xml");}
     static bool saveLoop(const juce::File& input,const juce::String& xml,juce::String hash={}){auto file=resolveFile(input);
-        if(!editable(file)){storageError()="Shared library is read-only";return false;}if(hash.isEmpty())hash=fingerprint(file);auto config=juce::parseXML(xml);if(!config)return false;config->removeAttribute("normalise");config->removeAttribute("normaliseLufs");config->removeAttribute("targetLufs");if(hash.isNotEmpty())config->setAttribute("contentHash",hash);auto value=config->toString();if(usingDatabase){try{bool ok=database()->saveLoop(file.getFullPathName(),hash,value);if(ok){database()->poll(true);pollDatabase();notifySharing();}return ok;}catch(const std::exception& e){storageError()=e.what();return false;}}if(diagnosticOldSave)return update("loops.json",[&](juce::DynamicObject& o){o.setProperty(file.getFullPathName(),value);if(hash.isNotEmpty())o.setProperty("sha256:"+hash,value);});
+        if(!editable(file)){storageError()="Shared library is read-only";return false;}if(hash.isEmpty())hash=fingerprint(file);auto config=juce::parseXML(xml);if(!config)return false;config->removeAttribute("normalise");config->removeAttribute("normaliseLufs");config->removeAttribute("targetLufs");if(hash.isNotEmpty())config->setAttribute("contentHash",hash);auto value=config->toString();if(usingDatabase){try{bool ok=database()->saveLoop(file.getFullPathName(),hash,value);if(ok){if(!database()->metadataEntry("parameter-edits.json",file.getFullPathName()).isVoid())update("parameter-edits.json",[&](juce::DynamicObject& o){o.removeProperty(file.getFullPathName());});database()->poll(true);pollDatabase();notifySharing();}return ok;}catch(const std::exception& e){storageError()=e.what();return false;}}if(diagnosticOldSave)return update("loops.json",[&](juce::DynamicObject& o){o.setProperty(file.getFullPathName(),value);if(hash.isNotEmpty())o.setProperty("sha256:"+hash,value);});
         const juce::ScopedLock guard(updateLock());juce::InterProcessLock fileLock("SliceGroupsLoop-"+juce::String(file.getFullPathName().hashCode64()));if(!fileLock.enter(1000))return false;
         auto persist=[&](juce::String key){auto target=loopConfigFile(key);if(!target.getParentDirectory().createDirectory())return false;juce::TemporaryFile temporary(target);return temporary.getFile().replaceWithText(value)&&temporary.overwriteTargetFileWithTemporary();};
         bool ok=persist("path:"+file.getFullPathName())&&(hash.isEmpty()||persist("sha256:"+hash));fileLock.exit();if(!ok)return false;
