@@ -13,7 +13,7 @@ Requires an **Apple Silicon Mac running macOS 14 or later**.
 3. Open the PKG and authorize installation when macOS asks.
 4. Reopen your host and rescan VST3 plug-ins if needed.
 
-The Developer ID signed PKG installs the full VST3 and stem models into `/Library/Audio/Plug-Ins/VST3/Slice Groups.vst3` for all users. It can replace an existing system installation with administrator authorization. Your samples, tags, presets and settings are preserved. No Python or model download is needed.
+The Developer ID signed, Apple-notarized PKG installs the full VST3 and stem models into `/Library/Audio/Plug-Ins/VST3/Slice Groups.vst3` for all users. It can replace an existing system installation with administrator authorization. Your samples, tags, presets and settings are preserved. No Python or model download is needed.
 
 If you also have a duplicate personal copy in `~/Library/Audio/Plug-Ins/VST3`, remove that duplicate before restarting your host. ZIP installers remain available on earlier releases. Windows and Intel Mac builds are not included.
 
@@ -28,14 +28,14 @@ Slice Groups source is licensed under **AGPLv3-or-later**. Dependencies retain t
 - Project-only arrangement controls, MIDI autosave and separate audio/MIDI browser locations per group.
 - MIDI-aware Previous/Next, Trash and Show in Library.
 - MIDI loop-region handles and fixes for live-edit retriggering and browser scroll jumps.
-- All 36 regression suites passed. Signed PKG; Apple notarization remains pending.
+- All 36 regression suites passed. Developer ID signed, Apple-notarized PKG with approval ticket attached.
 
 ## New in 0.50.5
 
 - Fixed Option-click slice insertion; FX anchor placement uses Option+Shift-click.
 - Dynamic stems pitch fix, Slice FX scheduling with MIDI Gate, power-of-two bar scaling, keyboard warning controls, Anchor Bar and Bars column.
 - Faster tag display while Bars metadata updates in the background.
-- This release is signed but not notarized; macOS may require approval in Privacy & Security.
+- The current installer is signed and Apple-notarized.
 
 ## New in 0.50.1
 
