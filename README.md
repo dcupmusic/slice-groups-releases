@@ -8,7 +8,7 @@ A macOS VST3 instrument for slicing loops, playing one-shots and multisamples, s
 
 Requires an **Apple Silicon Mac running macOS 14 or later**.
 
-1. Download **SliceGroups-0.50.5-AppleSilicon.pkg** from the latest release.
+1. Download **SliceGroups-0.51.0-AppleSilicon.pkg** from the latest release.
 2. Close Ableton and other audio hosts.
 3. Open the PKG and authorize installation when macOS asks.
 4. Reopen your host and rescan VST3 plug-ins if needed.
@@ -22,6 +22,13 @@ If you also have a duplicate personal copy in `~/Library/Audio/Plug-Ins/VST3`, r
 The application source is readable in this repository. Use GitHub’s automatic source download for the current code. Download unchanged dependencies once from the permanent **0.40.2 Source.zip release asset**, which includes full dependency sources, headers, runtime libraries and model weights. MIDI extraction additionally needs the small ONNX dependency ZIP attached to v0.42.3. Similarity weights are published once as DrumSimilarity.pt on v0.43.2. See BUILD.md and THIRD_PARTY.md for exact build steps.
 
 Slice Groups source is licensed under **AGPLv3-or-later**. Dependencies retain their own licenses.
+
+## New in 0.51.0
+
+- Project-only arrangement controls, MIDI autosave and separate audio/MIDI browser locations per group.
+- MIDI-aware Previous/Next, Trash and Show in Library.
+- MIDI loop-region handles and fixes for live-edit retriggering and browser scroll jumps.
+- All 36 regression suites passed. Signed PKG; Apple notarization remains pending.
 
 ## New in 0.50.5
 
