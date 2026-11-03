@@ -992,3 +992,20 @@ int runExtraction4100(){juce::ScopedJuceInitialiser_GUI gui;LibraryPreparation::
 #include "Features504Checks.h"
 
 #include "Features510Checks.h"
+
+#include "Features511Checks.h"
+
+#include "Features512Checks.h"
+
+#include "Features513Checks.h"
+
+#include "Features514Checks.h"
+#include "Features515Checks.h"
+
+#include "Features516Checks.h"
+
+#include "Features517Checks.h"
+
+#include "Features524Checks.h"
+
+#include "Features525Checks.h"

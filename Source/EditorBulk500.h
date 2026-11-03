@@ -7,3 +7,5 @@ void arrangementVisibility(){bool fx=!viewWarp501()&&!viewTrack501()&&!viewShot5
 }
 
 #include "EditorBulk501.h"
+
+#include "EditorMidiBulk512.h"

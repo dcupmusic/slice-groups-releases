@@ -8,7 +8,7 @@ A macOS VST3 instrument for slicing loops, playing one-shots and multisamples, s
 
 Requires an **Apple Silicon Mac running macOS 14 or later**.
 
-1. Download **SliceGroups-0.51.0-AppleSilicon.pkg** from the latest release.
+1. Download **SliceGroups-0.52.5-AppleSilicon.pkg** from the latest release.
 2. Close Ableton and other audio hosts.
 3. Open the PKG and authorize installation when macOS asks.
 4. Reopen your host and rescan VST3 plug-ins if needed.
@@ -22,6 +22,18 @@ If you also have a duplicate personal copy in `~/Library/Audio/Plug-Ins/VST3`, r
 The application source is readable in this repository. Use GitHub’s automatic source download for the current code. Download unchanged dependencies once from the permanent **0.40.2 Source.zip release asset**, which includes full dependency sources, headers, runtime libraries and model weights. MIDI extraction additionally needs the small ONNX dependency ZIP attached to v0.42.3. Similarity weights are published once as DrumSimilarity.pt on v0.43.2. See BUILD.md and THIRD_PARTY.md for exact build steps.
 
 Slice Groups source is licensed under **AGPLv3-or-later**. Dependencies retain their own licenses.
+
+## New in 0.52.5
+
+- Search Back restores folders, keywords, tag/type/colour/favourite filters, selection and scroll position. History stays separate per group/view and survives closing the plug-in window.
+- Melodic slice controls no longer overlap MIDI Gate; Spacebar activates the focused warning-dialog option.
+- Detect Key analyses loops in the background without renaming or modifying audio. Ambiguous major/minor evidence defaults to minor; existing manual keys are preserved.
+- MIDI Gate bypasses while the host is stopped. Preset names survive Set recall and show an asterisk after unsaved changes.
+- Unloaded loops populate the Bars column from saved timing, cached analysis or audio headers and named tempo.
+- Folder Rename, Copy, Cut, Paste and Move preserve metadata; renamed tags refresh correctly. Tag updates after reopening are faster.
+- Preset browsing has independent filters and cached results; Save Preset overwrites directly, with Save As on right-click. Tags display alphabetically. Filename and preset labels have separate positions.
+- Mono One Shot/Multi Glide, per-slice Velocity and browser persistence across groups/window closing.
+- All 45 regression suites passed. Developer ID signed, Apple-notarized PKG with approval ticket attached.
 
 ## New in 0.51.0
 

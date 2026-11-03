@@ -1,3 +1,12 @@
+int runFeatures525();
+int runFeatures524();
+int runFeatures517();
+int runFeatures516();
+int runFeatures515();
+int runFeatures514();
+int runFeatures513();
+int runFeatures512();
+int runFeatures511();
 int runFeatures510();
 int runFeatures504();
 int runFeatures503();
@@ -155,6 +164,15 @@ int main(int argc,char** argv) {
     if(argc==3&&std::string(argv[1])=="--timing412-check")return runTiming412(argv[2]);
     if(argc==2&&std::string(argv[1])=="--preanalysis411-check")return runPreanalysis411();
     if(argc==4&&std::string(argv[1])=="--click463-check")return runClick463(argv[2],argv[3]);
+    if(argc==2&&std::string(argv[1])=="--features525-check")return runFeatures525();
+    if(argc==2&&std::string(argv[1])=="--features524-check")return runFeatures524();
+    if(argc==2&&std::string(argv[1])=="--features517-check")return runFeatures517();
+    if(argc==2&&std::string(argv[1])=="--features516-check")return runFeatures516();
+    if(argc==2&&std::string(argv[1])=="--features515-check")return runFeatures515();
+    if(argc==2&&std::string(argv[1])=="--features514-check")return runFeatures514();
+    if(argc==2&&std::string(argv[1])=="--features513-check")return runFeatures513();
+    if(argc==2&&std::string(argv[1])=="--features512-check")return runFeatures512();
+    if(argc==2&&std::string(argv[1])=="--features511-check")return runFeatures511();
     if(argc==2&&std::string(argv[1])=="--features510-check")return runFeatures510();
     if(argc==2&&std::string(argv[1])=="--features504-check")return runFeatures504();
     if(argc==2&&std::string(argv[1])=="--features503-check")return runFeatures503();

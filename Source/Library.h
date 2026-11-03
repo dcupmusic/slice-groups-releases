@@ -138,6 +138,7 @@ public:
     static MusicalKey resolveMusicalKey(juce::File file,MusicalKey fallback={},bool midi=false){auto manual=musicalKeyOverride(file);if(manual.root!=-2)return manual;auto named=MusicalKey::filename(file.getFullPathName());if(midi&&named.known())return named;if(fallback.root!=-2)return {fallback.root,fallback.quality>=0?fallback.quality:(named.root==fallback.root?named.quality:-1)};return named;}
     inline static std::atomic<int> musicalKeyWrites{0};
     static bool setMusicalKeys(const juce::Array<juce::File>& files,MusicalKey key){for(auto file:files)if(!editable(file))return false;if(key.root==-2){std::vector<juce::String> identities;for(auto file:files){identities.push_back(file.getFullPathName());auto hash=fingerprint(file);if(hash.isNotEmpty())identities.push_back("sha256:"+hash);}if(!update("keys.json",[&](juce::DynamicObject& object){for(auto identity:identities)object.removeProperty(identity);}))return false;}return update("musical-keys.json",[&](juce::DynamicObject& object){for(auto file:files){if(key.root==-2)object.removeProperty(file.getFullPathName());else object.setProperty(file.getFullPathName(),key.value());}});}
+    static void queueTagWrite517(std::function<void()> write){static juce::ThreadPool pool{1};pool.addJob(std::move(write));}
     static void queueMusicalKeys(juce::Array<juce::File> files,MusicalKey key,std::function<void(bool)> complete={}){static juce::ThreadPool pool{1};++musicalKeyWrites;pool.addJob([files,key,complete]{bool ok=setMusicalKeys(files,key);--musicalKeyWrites;if(complete)juce::MessageManager::callAsync([complete,ok]{complete(ok);});});}
     static int fileKey(const juce::File& input,juce::String hash={}){auto file=resolveFile(input);auto musical=musicalKeyOverride(file);if(musical.root!=-2)return musical.root;auto keys=read("keys.json");auto* object=keys.getDynamicObject();auto path=file.getFullPathName();if(object->hasProperty(path))return juce::jlimit(-1,11,(int)object->getProperty(path));if(hash.isNotEmpty()&&object->hasProperty("sha256:"+hash))return juce::jlimit(-1,11,(int)object->getProperty("sha256:"+hash));return -2;}
     static bool setFileKey(const juce::File& input,int key,juce::String hash={}){auto file=resolveFile(input);if(hash.isEmpty())hash=fingerprint(file);key=juce::jlimit(-1,11,key);return update("keys.json",[&](juce::DynamicObject& object){object.setProperty(file.getFullPathName(),key);if(hash.isNotEmpty())object.setProperty("sha256:"+hash,key);});}
@@ -191,6 +192,12 @@ public:
         if(file.existsAsFile()&&!overwrite)ok=false;
         if(ok){if(file==juce::File())file=folder.getChildFile(juce::Uuid().toString()+".sgpreset");xml.setAttribute("presetName",name);juce::TemporaryFile temporary(file);ok=temporary.getFile().replaceWithText(xml.toString())&&temporary.overwriteTargetFileWithTemporary();}
         guard.exit();return ok;
+    }
+    static bool overwritePreset516(juce::File file,juce::String name,juce::String snapshot){
+        if(file.getParentDirectory()!=presetFolder()||!file.hasFileExtension("sgpreset")||!file.existsAsFile()||!file.hasWriteAccess())return false;
+        auto xml=juce::parseXML(snapshot);if(!xml)return false;xml->setAttribute("presetName",name);
+        juce::InterProcessLock guard("SliceGroupsPresets-"+juce::String(root().getFullPathName().hashCode64()));if(!guard.enter(1000))return false;
+        juce::TemporaryFile temporary(file);bool ok=temporary.getFile().replaceWithText(xml->toString())&&temporary.overwriteTargetFileWithTemporary();guard.exit();return ok;
     }
     struct Swing { bool enabled = false;double amount = 50; };
     static bool writeSwing(juce::String group,Swing swing) {
