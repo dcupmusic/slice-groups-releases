@@ -1,3 +1,5 @@
+int runPortable526Performance();
+int runFeatures526();
 int runFeatures525();
 int runFeatures524();
 int runFeatures517();
@@ -164,6 +166,8 @@ int main(int argc,char** argv) {
     if(argc==3&&std::string(argv[1])=="--timing412-check")return runTiming412(argv[2]);
     if(argc==2&&std::string(argv[1])=="--preanalysis411-check")return runPreanalysis411();
     if(argc==4&&std::string(argv[1])=="--click463-check")return runClick463(argv[2],argv[3]);
+    if(argc==2&&std::string(argv[1])=="--portable526-perf-check")return runPortable526Performance();
+    if(argc==2&&std::string(argv[1])=="--features526-check")return runFeatures526();
     if(argc==2&&std::string(argv[1])=="--features525-check")return runFeatures525();
     if(argc==2&&std::string(argv[1])=="--features524-check")return runFeatures524();
     if(argc==2&&std::string(argv[1])=="--features517-check")return runFeatures517();

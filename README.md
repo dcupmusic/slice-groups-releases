@@ -8,7 +8,7 @@ A macOS VST3 instrument for slicing loops, playing one-shots and multisamples, s
 
 Requires an **Apple Silicon Mac running macOS 14 or later**.
 
-1. Download **SliceGroups-0.52.5-AppleSilicon.pkg** from the latest release.
+1. Download **SliceGroups-0.52.6-AppleSilicon.pkg** from the latest release.
 2. Close Ableton and other audio hosts.
 3. Open the PKG and authorize installation when macOS asks.
 4. Reopen your host and rescan VST3 plug-ins if needed.
@@ -22,6 +22,15 @@ If you also have a duplicate personal copy in `~/Library/Audio/Plug-Ins/VST3`, r
 The application source is readable in this repository. Use GitHub’s automatic source download for the current code. Download unchanged dependencies once from the permanent **0.40.2 Source.zip release asset**, which includes full dependency sources, headers, runtime libraries and model weights. MIDI extraction additionally needs the small ONNX dependency ZIP attached to v0.42.3. Similarity weights are published once as DrumSimilarity.pt on v0.43.2. See BUILD.md and THIRD_PARTY.md for exact build steps.
 
 Slice Groups source is licensed under **AGPLv3-or-later**. Dependencies retain their own licenses.
+
+## New in 0.52.6
+
+- Embed Samples in Set is on by default in Settings. Full source audio for all eight groups, including muted Tracks, Multi/SFZ layers and confirmed audition instruments, travels in the Ableton Set. Identical samples share one embedded copy per plug-in instance.
+- Open and save existing Sets once to make them portable. Collaborators need 0.52.6 or newer; old path-only Sets remain readable.
+- Lossless compression runs in the background and prepared audio is reused across saves. Immediate saves include uncompressed audio rather than omit pending samples. Large samples increase Set size and serialization time.
+- Embedded sources restore without the original library and take precedence over original paths. Recovered audio is protected; Save Embedded Audio As / Multi Save As creates independent files.
+- Loop, Multi and preset file formats are unchanged. Embedding applies only to host project state, with checksum and size validation.
+- 48 regression/compatibility suites passed. Signed, notarized, stapled and Gatekeeper-verified PKG.
 
 ## New in 0.52.5
 

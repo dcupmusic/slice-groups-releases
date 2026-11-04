@@ -265,7 +265,7 @@ public:
 };
 #include "OwnedSharing.h"
 inline void LibraryStore::notifySharing(){OwnedLibrarySharing::instance().refresh();}
-inline bool LibraryStore::editable(juce::File file){return OwnedLibrarySharing::instance().editable(resolveFile(file));}
+inline bool LibraryStore::editable(juce::File file){if(file.isAChildOf(root().getChildFile("embedded-media-v1")))return false;return OwnedLibrarySharing::instance().editable(resolveFile(file));}
 inline void LibraryStore::mergeShared(const juce::String& name,juce::var& value){if(usingDatabase){auto merged=OwnedLibrarySharing::instance().snapshot(name);if(merged.isObject())value=merged;}else if(diagnosticSharing)SharedLibraryMetadata::instance().merge(name,value);}
 inline void LibraryStore::queueShared(const juce::String& name,const juce::var& before,const juce::var& after){if(!usingDatabase&&diagnosticSharing)SharedLibraryMetadata::instance().enqueue(name,before,after);}
 
