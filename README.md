@@ -8,7 +8,7 @@ A macOS VST3 instrument for slicing loops, playing one-shots and multisamples, s
 
 Requires an **Apple Silicon Mac running macOS 14 or later**.
 
-1. Download **SliceGroups-0.52.7-AppleSilicon.pkg** from the latest release.
+1. Download **SliceGroups-0.52.8-AppleSilicon.pkg** from the latest release.
 2. Close Ableton and other audio hosts.
 3. Open the PKG and authorize installation when macOS asks.
 4. Reopen your host and rescan VST3 plug-ins if needed.
@@ -17,11 +17,20 @@ The Developer ID signed, Apple-notarized PKG installs the standalone app in `/Ap
 
 If you also have a duplicate personal copy in `~/Library/Audio/Plug-Ins/VST3`, remove that duplicate before restarting your host. ZIP installers remain available on earlier releases. Windows and Intel Mac builds are not included.
 
+For an existing compatible installation (tested with 0.52.7), use **SliceGroups-0.52.8-AppleSilicon-Update.pkg**, approximately **21 MB**. It reuses installed models and libraries. The Update.zip contains the same notarized PKG for in-app update downloads. Use the full PKG for first installation or if dependencies are missing.
+
 ## Source
 
 The application source is readable in this repository. Use GitHub’s automatic source download for the current code. Download unchanged dependencies once from the permanent **0.40.2 Source.zip release asset**, which includes full dependency sources, headers, runtime libraries and model weights. MIDI extraction additionally needs the small ONNX dependency ZIP attached to v0.42.3. Similarity weights are published once as DrumSimilarity.pt on v0.43.2. See BUILD.md and THIRD_PARTY.md for exact build steps.
 
 Slice Groups source is licensed under **AGPLv3-or-later**. Dependencies retain their own licenses.
+
+## New in 0.52.8
+
+- Portable single-file presets automatically include all loaded source audio; Save Preset opens Save As and Option-click overwrites asynchronously.
+- Ableton Sets always include loaded audio. Manual embedding controls and preset-saving restrictions are removed.
+- Legacy presets remain readable; new portable presets require 0.52.8 or newer.
+- Added a 21 MB signed/notarized update-only installer, tested from 0.52.7, alongside the full VST3 + standalone installer. Missing dependencies stop the update before replacement; failed replacement rolls back.
 
 ## New in 0.52.7
 

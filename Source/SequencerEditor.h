@@ -2,7 +2,7 @@
 #include "Controls.h"
 #include "MidiExtraction.h"
 #include "MusicalKeyPicker.h"
-class SequencerEditor final:public juce::Component,public juce::FileDragAndDropTarget,private juce::Timer {
+class SequencerEditor final:public juce::Component,public juce::FileDragAndDropTarget,private juce::Timer {friend int runFeatures528();
 friend int runFeatures512();friend int runFeatures513();friend class Editor;friend int runFeatures510();
 friend int runFeatures471();
 friend int runFeatures480();

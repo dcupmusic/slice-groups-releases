@@ -1,4 +1,4 @@
-int runPortable526Performance();
+int runPortable526Performance(bool preset=false);
 int runFeatures526();
 int runFeatures525();
 int runFeatures524();
@@ -161,13 +161,16 @@ int runSliceGroupsLibraryRhythmChecks();
 int runSliceGroupsTransportChecks();
 int runSliceGroupsGuiCheck(const char*);
 int runFeatures527();
+int runFeatures528();
 int main(int argc,char** argv) {
+    if(argc==2&&std::string(argv[1])=="--features528-check")return runFeatures528();
     if(argc==2&&std::string(argv[1])=="--features527-check")return runFeatures527();
     setenv("SLICE_GROUPS_DISABLE_UPDATES","1",1);
     if(argc==4&&std::string(argv[1])=="--transient407-check")return runTransient407(argv[2],argv[3]);
     if(argc==3&&std::string(argv[1])=="--timing412-check")return runTiming412(argv[2]);
     if(argc==2&&std::string(argv[1])=="--preanalysis411-check")return runPreanalysis411();
     if(argc==4&&std::string(argv[1])=="--click463-check")return runClick463(argv[2],argv[3]);
+    if(argc==2&&std::string(argv[1])=="--preset528-perf-check")return runPortable526Performance(true);
     if(argc==2&&std::string(argv[1])=="--portable526-perf-check")return runPortable526Performance();
     if(argc==2&&std::string(argv[1])=="--features526-check")return runFeatures526();
     if(argc==2&&std::string(argv[1])=="--features525-check")return runFeatures525();

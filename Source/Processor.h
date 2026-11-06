@@ -25,7 +25,7 @@ struct Envelope { bool enabled=false;double attack=0,hold=0,decay=150; };
 struct Slice { int start = 0, end = 0, note = 36;bool excludeRhythm = false;Envelope envelope;int category=-1;bool muted=false;double gainDb=0;int replacement=-1;int melodicNote=-1,melodicAnalysedStart=-1,melodicAnalysedEnd=-1;bool melodicManual=false;int velocity=127;double playbackEnd=1,endFadeMs=0,playbackLengthMs=-1;int audibleEnd(double rate=44100)const{double length=playbackLengthMs>=0?playbackLengthMs*rate/1000:(end-start)*playbackEnd;return start+(int)std::round(juce::jlimit(1.,(double)(end-start),length));}double endMs(double rate)const{return playbackLengthMs>=0?playbackLengthMs:(audibleEnd(rate)-start)*1000/rate;} };
 struct AudioData;
 struct SfzRegion {std::shared_ptr<const AudioData> source;int low=0,high=127,lovel=0,hivel=127,root=60,start=0,end=-1,loopStart=0,loopEnd=-1,loopMode=0,roundRobinGroup=0,melodicSliceId=0;double tune=0,gain=1,pan=0,crossfadeMs=0,pitchConfidence=0;bool pingPong=false,zeroSnap=false;juce::String pitchMethod;double endFadeMs=0;};
-struct PortableAudioCache526 {struct Payload{juce::String checksum;juce::MemoryBlock compressed;};std::atomic<bool> started{false};std::shared_ptr<const Payload> ready;};
+struct PortableAudioCache526 {struct Payload{juce::String checksum,storedChecksum;juce::MemoryBlock compressed;};std::atomic<bool> started{false};std::shared_ptr<const Payload> ready;};
 struct AudioData {
     std::shared_ptr<PortableAudioCache526> portableCache526=std::make_shared<PortableAudioCache526>();bool embedded526=false;std::shared_ptr<const AudioData> embeddedOwner526;
     std::vector<SfzRegion> sfzRegions;juce::String sfzWarning;juce::ADSR::Parameters sfzEnvelope{.005f,.1f,.8f,.25f};
@@ -564,7 +564,7 @@ public:
     }
     bool installAudio(std::shared_ptr<const AudioData> next,bool restoreSaved = true,uint64_t serial = 0,bool prepareStretch=true) {
         if (!next) return false;
-        markPresetChanged524();if(portableBackground526&&portableProject526->enabled)requestPortableTree526(next);queueSequenceAutoSave(true);queueAutoSave(true);
+        markPresetChanged524();if(portableBackground526)requestPortableTree526(next);queueSequenceAutoSave(true);queueAutoSave(true);
         bool heldFx=stretchAnchorEnabled;double preferred,meter,heldBegin=0,heldStart=0;
         { const juce::ScopedLock g(lock);if(audio){heldBegin=(regionStart()-gridOrigin())/audio->rate*sourceBpm/60;heldStart=(startMarker-regionStart())/audio->rate*sourceBpm/60;}preferred = hostBpm;meter = hostNumerator*4.0/hostDenominator; }
         int numerator = next->metadata.getValue(juce::WavAudioFormat::acidNumerator,"0").getIntValue();
@@ -1000,18 +1000,19 @@ public:
     }
     std::function<int()> currentRackTrackOwner;std::function<void(int)> restoreRackTrackOwner;
     std::function<std::unique_ptr<juce::XmlElement>()> rackPreset;
+    std::function<std::shared_ptr<PortableMedia526::Snapshot>()> rackPortablePreset528;
     std::function<bool(const juce::XmlElement&,std::function<bool()>)> rackRecall;
     std::function<void()> browserPathsChanged517;
     void resolveRuntimePaths517(){const juce::ScopedLock guard(lock);auto resolve=[](juce::String path){return path.isEmpty()?path:LibraryStore::resolveFile(juce::File(path)).getFullPathName();};sequence.path=resolve(sequence.path);extractionInstrumentPath=resolve(extractionInstrumentPath);browserPath=resolve(browserPath);}
-    struct PresetDestination516{juce::CriticalSection lock;juce::File file;juce::String name;std::atomic<bool> dirty{false};std::atomic<uint64_t> changes{0};};
+    struct PresetDestination516{juce::CriticalSection lock;juce::File file;juce::String name;std::atomic<bool> dirty{false};std::atomic<uint64_t> changes{0},saveGeneration528{0};};
     std::shared_ptr<PresetDestination516> presetDestination516=std::make_shared<PresetDestination516>();
-    void rememberPreset516(juce::File file,juce::String name){const juce::ScopedLock guard(presetDestination516->lock);presetDestination516->file=file;presetDestination516->name=name;presetDestination516->dirty=false;}
+    void rememberPreset516(juce::File file,juce::String name){const juce::ScopedLock guard(presetDestination516->lock);presetDestination516->file=file;presetDestination516->name=name;presetDestination516->dirty=false;++presetDestination516->saveGeneration528;}
     void markPresetChanged524(){presetDestination516->dirty=true;++presetDestination516->changes;}
     void writePresetIdentity524(juce::XmlElement& xml)const{auto current=currentPreset516();xml.setAttribute("activePresetPath",current.first.getFullPathName());xml.setAttribute("activePresetName",current.second);xml.setAttribute("activePresetDirty",presetDestination516->dirty.load());}
     void readPresetIdentity524(const juce::XmlElement& xml){rememberPreset516(juce::File(xml.getStringAttribute("activePresetPath")),xml.getStringAttribute("activePresetName"));presetDestination516->dirty=xml.getBoolAttribute("activePresetDirty");}
     std::pair<juce::File,juce::String> currentPreset516()const{const juce::ScopedLock guard(presetDestination516->lock);return {presetDestination516->file,presetDestination516->name};}
     std::unique_ptr<juce::XmlElement> presetSnapshot516(){if(rackPreset)return rackPreset();const juce::ScopedLock g(lock);if(!audio||audio->path.isEmpty())return {};auto xml=configurationXml();xml->setAttribute("loopLengthLocked",loopLengthLocked);xml->setAttribute("lockedBars",lockedBars);return xml;}
-    bool savePreset(juce::String name,bool overwrite=false){auto xml=presetSnapshot516();if(!xml||PortableMedia526::containsManagedReferences(*xml)||!LibraryStore::savePreset(name,*xml,overwrite))return false;rememberPreset516(LibraryStore::findPreset(name),name.trim().substring(0,120));return true;}
+    bool savePreset(juce::String name,bool overwrite=false){auto snapshot=presetSnapshot528();if(!snapshot)return false;name=name.trim().substring(0,120);if(name.isEmpty())return false;auto file=LibraryStore::findPreset(name);if(file!=juce::File()&&!overwrite)return false;if(file==juce::File())file=LibraryStore::presetFolder().getChildFile(juce::Uuid().toString()+".sgpreset");juce::String error;if(!PortableMedia526::savePreset(file,name,*snapshot,error)){portableProject526->fail(error);return false;}rememberPreset516(file,name);return true;}
     bool installPreset(std::shared_ptr<const AudioData> next,const juce::XmlElement& xml,uint64_t serial=0){
         if(xml.hasTagName("SliceGroupsRack")&&rackRecall){if(serial&&serial!=loadGeneration.load())return false;return rackRecall(xml,[this,serial]{return serial&&serial!=loadGeneration.load();});}
         queueSequenceAutoSave(true);if(!next||xml.getTagName()!="SliceGroups"||xml.getIntAttribute("samples")!=next->buffer.getNumSamples()||std::abs(xml.getDoubleAttribute("rate")-next->rate)>.01)return false;
@@ -1094,7 +1095,7 @@ public:
         return ok;
     }
     #include "ProcessorPortable526.h"
-    void getStateInformation(juce::MemoryBlock& block) override {if(!portableProject526->enabled&&usesEmbedded526())portableProject526->enabled=true;bool embed=portableProject526->enabled;std::vector<PortableMedia526::Source> sources;std::map<const AudioData*,juce::String> ids;auto xml=embed?capturePortable526(sources,ids):configurationXml(true);writePresetIdentity524(*xml);writePortable526(*xml,sources,block,embed);}
+    void getStateInformation(juce::MemoryBlock& block) override {portableProject526->enabled=true;std::vector<PortableMedia526::Source> sources;std::map<const AudioData*,juce::String> ids;auto xml=capturePortable526(sources,ids);writePresetIdentity524(*xml);writePortable526(*xml,sources,block,true);}
 
     void setStateInformation(const void* bytes,int size) override {
         std::shared_ptr<PortableMedia526::Restored> portable;std::unique_ptr<juce::XmlElement> legacy;juce::String error;
@@ -1104,7 +1105,7 @@ public:
         Processor validator(false);validator.audio=decoded;if(!validator.applyConfiguration(*xml,true)){portableProject526->fail("Invalid sample mapping in project state");return;}
         if(!installAudio(decoded,false,0,false))return;
         {const juce::ScopedLock g(lock);if(!applyConfiguration(*xml,true))return;readPresetIdentity524(*xml);libraryDirty=true;hasSavedConfig=false;resetHistory();}
-        portableProject526->enabled=xml->getBoolAttribute("embedSamplesInSet526",true);portableProject526->retained=portable;portableProject526->fail(xml->getStringAttribute("embeddingError526"));preparePortable526();
+        portableProject526->enabled=true;portableProject526->retained=portable;portableProject526->fail(xml->getStringAttribute("embeddingError526"));preparePortable526();
         if(juce::MessageManager::getInstanceWithoutCreating())startTimer(200);
     }
 };

@@ -1,4 +1,5 @@
 #pragma once
+#include "PresetFile528.h"
 #include <juce_audio_utils/juce_audio_utils.h>
 #include <map>
 #include <set>
@@ -183,8 +184,10 @@ public:
         return match;
     }
     static juce::File presetFolder(){return root().getChildFile("Presets");}
-    static juce::String presetName(const juce::File& file){auto xml=juce::XmlDocument::parse(file);return xml?xml->getStringAttribute("presetName",file.getFileNameWithoutExtension()):file.getFileNameWithoutExtension();}
-    static juce::File findPreset(juce::String name){for(auto entry:juce::RangedDirectoryIterator(presetFolder(),false,"*.sgpreset",juce::File::findFiles))if(presetName(entry.getFile()).equalsIgnoreCase(name.trim()))return entry.getFile();return {};}
+    static juce::Array<juce::File> presetFiles528(){juce::Array<juce::File> files;for(auto entry:juce::RangedDirectoryIterator(presetFolder(),false,"*.sgpreset",juce::File::findFiles))files.addIfNotAlreadyThere(entry.getFile());auto locations=read("preset-locations528.json").getProperty("files",{});if(auto* values=locations.getArray())for(auto value:*values){juce::File file(value.toString());if(file.hasFileExtension("sgpreset")&&file.existsAsFile())files.addIfNotAlreadyThere(file);}return files;}
+    static void rememberPreset528(juce::File file){if(file.getParentDirectory()==presetFolder())return;auto path=file.getFullPathName();auto list=read("preset-locations528.json").getProperty("files",{});if(auto* values=list.getArray())for(auto value:*values)if(value.toString()==path)return;update("preset-locations528.json",[&](juce::DynamicObject& settings){auto values=settings.getProperty("files");if(!values.isArray())values=juce::Array<juce::var>();values.append(path);settings.setProperty("files",values);});}
+    static juce::String presetName(const juce::File& file){auto xml=PresetFile528::header(file);return xml?xml->getStringAttribute("presetName",file.getFileNameWithoutExtension()):file.getFileNameWithoutExtension();}
+    static juce::File findPreset(juce::String name){for(auto file:presetFiles528())if(presetName(file).equalsIgnoreCase(name.trim()))return file;return {};}
     static bool savePreset(juce::String name,juce::XmlElement& xml,bool overwrite=false){
         name=name.trim().substring(0,120);if(name.isEmpty())return false;
         juce::InterProcessLock guard("SliceGroupsPresets-"+juce::String(root().getFullPathName().hashCode64()));if(!guard.enter(1000))return false;
@@ -192,6 +195,11 @@ public:
         if(file.existsAsFile()&&!overwrite)ok=false;
         if(ok){if(file==juce::File())file=folder.getChildFile(juce::Uuid().toString()+".sgpreset");xml.setAttribute("presetName",name);juce::TemporaryFile temporary(file);ok=temporary.getFile().replaceWithText(xml.toString())&&temporary.overwriteTargetFileWithTemporary();}
         guard.exit();return ok;
+    }
+    static bool writePreset528(juce::File file,const juce::MemoryBlock& bytes){
+        if(bytes.isEmpty()||!file.hasFileExtension("sgpreset")||!editable(file)||!file.getParentDirectory().createDirectory()||(file.existsAsFile()&&!file.hasWriteAccess()))return false;
+        juce::InterProcessLock guard("SliceGroupsPresets-"+juce::String(root().getFullPathName().hashCode64()));if(!guard.enter(1000))return false;
+        juce::TemporaryFile temporary(file);bool ok=temporary.getFile().replaceWithData(bytes.getData(),bytes.getSize())&&temporary.overwriteTargetFileWithTemporary();guard.exit();return ok;
     }
     static bool savePresetFile527(juce::File file,juce::String name,juce::String snapshot){
         if(!file.hasFileExtension("sgpreset")||!editable(file)||!file.getParentDirectory().createDirectory())return false;

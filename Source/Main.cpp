@@ -173,7 +173,7 @@ int runSliceGroupsGuiCheck(const char* path) {
 
     if(!p.savePreset("Zebra GUI",true)||!p.savePreset("Alpha GUI",true))return 940;
     editor.presetsForCheck();if(editor.browserRowsForCheck()<2||editor.browserNameForCheck(0)!="Alpha GUI")return 941;
-    auto savedPreset=LibraryStore::findPreset("Alpha GUI");auto target=juce::XmlDocument::parse(savedPreset);p.setSliceGain({4},-9);
+    auto savedPreset=LibraryStore::findPreset("Alpha GUI");auto target=PresetFile528::header(savedPreset);p.setSliceGain({4},-9);
     {LoopLoader presetLoader(p);presetLoader.startThread();presetLoader.request(savedPreset);
         for(int n=0;n<300;++n){bool ready;{const juce::ScopedLock g(p.lock);ready=p.slices[4].gainDb==0;}if(ready)break;juce::Thread::sleep(10);}
         if(p.slices[4].gainDb!=0)return 942;
@@ -464,14 +464,14 @@ int runSliceGroupsV083Checks(){
     original.setRhythm(true,.125,.49);original.setSwing(true,65);original.setTrim(100,47000);original.setStart(1000);original.setLoopLock(true);original.setPlayMode(true);
     auto expected=original.configurationXml()->toString();
     if(!original.savePreset("Zulu test",true)||!original.savePreset("Alpha test",true)||original.savePreset("ALPHA TEST"))return 932;
-    auto preset=LibraryStore::findPreset("alpha TEST");auto xml=juce::XmlDocument::parse(preset);if(!xml||LibraryStore::presetName(preset)!="Alpha test")return 933;
+    auto preset=LibraryStore::findPreset("alpha TEST");auto xml=PresetFile528::header(preset);if(!xml||LibraryStore::presetName(preset)!="Alpha test")return 933;
     Processor restored;auto next=restored.readAudio(file);if(!restored.installPreset(next,*xml)||restored.configurationXml()->toString()!=expected||restored.swingLinked||!restored.loopLengthLocked)return 934;
     restored.setSliceGain({3},-12);if(!restored.undoRedo(false)||restored.slices[3].gainDb!=-3)return 935;
     auto before=restored.configurationXml()->toString();xml->setAttribute("samples",100);
     if(restored.installPreset(next,*xml)||restored.configurationXml()->toString()!=before)return 936;
-    xml=juce::XmlDocument::parse(preset);if(restored.installPreset(next,*xml,restored.loadGeneration+1))return 937;
+    xml=PresetFile528::header(preset);if(restored.installPreset(next,*xml,restored.loadGeneration+1))return 937;
     original.setSliceGain({3},-7);if(!original.savePreset("Alpha test",true))return 938;
-    xml=juce::XmlDocument::parse(preset);if(!restored.installPreset(next,*xml)||restored.slices[3].gainDb!=-7)return 939;
+    xml=PresetFile528::header(preset);if(!restored.installPreset(next,*xml)||restored.slices[3].gainDb!=-7)return 939;
     std::cout<<"v0.8.3 named preset storage/overwrite, exact loop recall, undo and invalid/stale load checks passed\n";return 0;
 }
 
@@ -1015,3 +1015,5 @@ int runExtraction4100(){juce::ScopedJuceInitialiser_GUI gui;LibraryPreparation::
 #include "Portable526PerformanceChecks.h"
 
 #include "Features527Checks.h"
+
+#include "Features528Checks.h"
