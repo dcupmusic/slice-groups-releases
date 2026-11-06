@@ -193,8 +193,15 @@ public:
         if(ok){if(file==juce::File())file=folder.getChildFile(juce::Uuid().toString()+".sgpreset");xml.setAttribute("presetName",name);juce::TemporaryFile temporary(file);ok=temporary.getFile().replaceWithText(xml.toString())&&temporary.overwriteTargetFileWithTemporary();}
         guard.exit();return ok;
     }
+    static bool savePresetFile527(juce::File file,juce::String name,juce::String snapshot){
+        if(!file.hasFileExtension("sgpreset")||!editable(file)||!file.getParentDirectory().createDirectory())return false;
+        if(file.existsAsFile()&&!file.hasWriteAccess())return false;
+        auto xml=juce::parseXML(snapshot);if(!xml)return false;xml->setAttribute("presetName",name.trim().substring(0,120));
+        juce::InterProcessLock guard("SliceGroupsPresets-"+juce::String(root().getFullPathName().hashCode64()));if(!guard.enter(1000))return false;
+        juce::TemporaryFile temporary(file);bool ok=temporary.getFile().replaceWithText(xml->toString())&&temporary.overwriteTargetFileWithTemporary();guard.exit();return ok;
+    }
     static bool overwritePreset516(juce::File file,juce::String name,juce::String snapshot){
-        if(file.getParentDirectory()!=presetFolder()||!file.hasFileExtension("sgpreset")||!file.existsAsFile()||!file.hasWriteAccess())return false;
+        if(!editable(file)||!file.hasFileExtension("sgpreset")||!file.existsAsFile()||!file.hasWriteAccess())return false;
         auto xml=juce::parseXML(snapshot);if(!xml)return false;xml->setAttribute("presetName",name);
         juce::InterProcessLock guard("SliceGroupsPresets-"+juce::String(root().getFullPathName().hashCode64()));if(!guard.enter(1000))return false;
         juce::TemporaryFile temporary(file);bool ok=temporary.getFile().replaceWithText(xml->toString())&&temporary.overwriteTargetFileWithTemporary();guard.exit();return ok;

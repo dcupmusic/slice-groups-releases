@@ -1013,3 +1013,5 @@ int runExtraction4100(){juce::ScopedJuceInitialiser_GUI gui;LibraryPreparation::
 #include "Features526Checks.h"
 
 #include "Portable526PerformanceChecks.h"
+
+#include "Features527Checks.h"

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build a system-wide VST3 PKG. Signing requires Developer ID Installer.
+"""Build a system-wide VST3 and standalone PKG. Signing requires Developer ID Installer.
 
 Input must be the complete, Developer ID signed plug-in (including models).
 An unsigned preparation package is explicitly named UNSIGNED and must never
@@ -14,11 +14,13 @@ from xml.sax.saxutils import escape
 
 p = argparse.ArgumentParser(description=__doc__)
 p.add_argument('--plugin', type=Path, required=True)
+p.add_argument('--standalone', type=Path, help='Signed standalone app to install in Applications')
 p.add_argument('--version', required=True)
 p.add_argument('--output', type=Path, required=True)
 p.add_argument('--identity', help='Developer ID Installer identity; omit to prepare only')
 a = p.parse_args()
 source = a.plugin.resolve()
+standalone = a.standalone.resolve() if a.standalone else None
 folder = a.output.resolve()
 folder.mkdir(parents=True, exist_ok=True)
 info = plistlib.loads((source/'Contents/Info.plist').read_bytes())
@@ -28,6 +30,14 @@ subprocess.run(['codesign', '--verify', '--deep', '--strict', str(source)], chec
 subprocess.run(['codesign', '--verify', '-R', '=anchor apple generic and certificate leaf[subject.OU] = "Q5YNM8U8JB"', str(source)], check=True)
 for model in ['SCNet.pt', 'SCNet-HQ.pt']:
     assert list(source.rglob(model)), f'Full installer needs {model}'
+if standalone:
+    app_info = plistlib.loads((standalone/'Contents/Info.plist').read_bytes())
+    assert app_info['CFBundleShortVersionString'] == a.version
+    assert app_info['CFBundlePackageType'] == 'APPL'
+    subprocess.run(['codesign', '--verify', '--deep', '--strict', str(standalone)], check=True)
+    subprocess.run(['codesign', '--verify', '-R', '=anchor apple generic and certificate leaf[subject.OU] = "Q5YNM8U8JB"', str(standalone)], check=True)
+    for model in ['SCNet.pt', 'SCNet-HQ.pt']:
+        assert list(standalone.rglob(model)), f'Standalone needs {model}'
 root = folder/'payload'
 if root.exists():
     shutil.rmtree(root)
@@ -45,7 +55,7 @@ scripts.mkdir(exist_ok=True)
 preinstall = scripts/'preinstall'
 preinstall.write_text('''#!/bin/sh
 # Never replace a plug-in while a recognised audio host is using it.
-for host in Live REAPER Logic\\ Pro GarageBand BitwigStudio Cubase Nuendo Studio\\ One; do
+for host in Slice\\ Groups Live REAPER Logic\\ Pro GarageBand BitwigStudio Cubase Nuendo Studio\\ One; do
     if /usr/bin/pgrep -x "$host" >/dev/null 2>&1; then
         echo "Close $host before installing Slice Groups." >&2
         exit 1
@@ -59,6 +69,22 @@ subprocess.run(['pkgbuild', '--root', str(root), '--component-plist', str(compon
                 '--identifier', 'audio.slicegroups.pkg.vst3', '--version', a.version,
                 '--install-location', '/Library/Audio/Plug-Ins/VST3', '--ownership', 'recommended',
                 '--scripts', str(scripts), str(component)], check=True)
+if standalone:
+    app_root = folder/'app-payload'
+    if app_root.exists(): shutil.rmtree(app_root)
+    app_root.mkdir()
+    subprocess.run(['ditto', str(standalone), str(app_root/'Slice Groups.app')], check=True)
+    app_components = folder/'app-components.plist'
+    subprocess.run(['pkgbuild', '--analyze', '--root', str(app_root), str(app_components)], check=True)
+    app_entries = plistlib.loads(app_components.read_bytes())
+    for entry in app_entries:
+        entry.update(BundleIsRelocatable=False, BundleHasStrictIdentifier=True,
+                     BundleIsVersionChecked=True, BundleOverwriteAction='upgrade')
+    app_components.write_bytes(plistlib.dumps(app_entries))
+    subprocess.run(['pkgbuild', '--root', str(app_root), '--component-plist', str(app_components),
+                    '--identifier', 'audio.slicegroups.pkg.standalone', '--version', a.version,
+                    '--install-location', '/Applications', '--ownership', 'recommended',
+                    '--scripts', str(scripts), str(folder/'SliceGroups-standalone.pkg')], check=True)
 resources = folder/'resources'
 resources.mkdir(exist_ok=True)
 (resources/'Welcome.html').write_text('''<html><body><h2>Slice Groups '''+escape(a.version)+'''</h2>
@@ -66,6 +92,7 @@ resources.mkdir(exist_ok=True)
 <p>Close Ableton Live and other audio hosts before installing.</p>
 <p>This installs the VST3 plug-in and all stem models for all users into
 <b>/Library/Audio/Plug-Ins/VST3/Slice Groups.vst3</b>. macOS will request administrator authorization.</p>
+'''+('<p>The standalone app is installed in <b>/Applications/Slice Groups.app</b>. Close it before updating.</p>' if standalone else '')+'''
 <p>Your samples, libraries, tags, presets and settings are preserved.</p>
 <p>If you previously installed a second copy in your personal
 ~/Library/Audio/Plug-Ins/VST3 folder, remove that duplicate before restarting your host.</p>
@@ -78,9 +105,10 @@ distribution.write_text('''<?xml version="1.0" encoding="utf-8"?>
   <options customize="never" require-scripts="false" hostArchitectures="arm64"/>
   <domains enable_localSystem="true" enable_currentUserHome="false" enable_anywhere="false"/>
   <volume-check><allowed-os-versions><os-version min="14.0"/></allowed-os-versions></volume-check>
-  <choices-outline><line choice="vst3"/></choices-outline>
+  <choices-outline><line choice="vst3"/>'''+('<line choice="standalone"/>' if standalone else '')+'''</choices-outline>
   <choice id="vst3" visible="false"><pkg-ref id="audio.slicegroups.pkg.vst3"/></choice>
   <pkg-ref id="audio.slicegroups.pkg.vst3" version="'''+escape(a.version)+'''" onConclusion="none">SliceGroups-component.pkg</pkg-ref>
+'''+('<choice id="standalone" visible="false"><pkg-ref id="audio.slicegroups.pkg.standalone"/></choice><pkg-ref id="audio.slicegroups.pkg.standalone" version="'+escape(a.version)+'" onConclusion="none">SliceGroups-standalone.pkg</pkg-ref>' if standalone else '')+'''
 </installer-gui-script>
 ''')
 name = f'SliceGroups-{a.version}-AppleSilicon'+('' if a.identity else '-UNSIGNED')+'.pkg'

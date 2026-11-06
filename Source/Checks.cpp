@@ -160,7 +160,9 @@ int runSliceGroupsChecks();
 int runSliceGroupsLibraryRhythmChecks();
 int runSliceGroupsTransportChecks();
 int runSliceGroupsGuiCheck(const char*);
+int runFeatures527();
 int main(int argc,char** argv) {
+    if(argc==2&&std::string(argv[1])=="--features527-check")return runFeatures527();
     setenv("SLICE_GROUPS_DISABLE_UPDATES","1",1);
     if(argc==4&&std::string(argv[1])=="--transient407-check")return runTransient407(argv[2],argv[3]);
     if(argc==3&&std::string(argv[1])=="--timing412-check")return runTiming412(argv[2]);
