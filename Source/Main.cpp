@@ -1017,3 +1017,6 @@ int runExtraction4100(){juce::ScopedJuceInitialiser_GUI gui;LibraryPreparation::
 #include "Features527Checks.h"
 
 #include "Features528Checks.h"
+#include "Features529Checks.h"
+
+#include "MultiWindowChecks.h"

@@ -162,7 +162,11 @@ int runSliceGroupsTransportChecks();
 int runSliceGroupsGuiCheck(const char*);
 int runFeatures527();
 int runFeatures528();
+int runMultiWindowChecks();
+int runFeatures529();
 int main(int argc,char** argv) {
+    if(argc==2&&std::string(argv[1])=="--multi-window-check")return runMultiWindowChecks();
+    if(argc==2&&std::string(argv[1])=="--features529-check")return runFeatures529();
     if(argc==2&&std::string(argv[1])=="--features528-check")return runFeatures528();
     if(argc==2&&std::string(argv[1])=="--features527-check")return runFeatures527();
     setenv("SLICE_GROUPS_DISABLE_UPDATES","1",1);

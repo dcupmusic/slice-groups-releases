@@ -8,7 +8,7 @@ A macOS VST3 instrument for slicing loops, playing one-shots and multisamples, s
 
 Requires an **Apple Silicon Mac running macOS 14 or later**.
 
-1. Download **SliceGroups-0.52.8-AppleSilicon.pkg** from the latest release.
+1. Download **SliceGroups-0.52.14-AppleSilicon.pkg** from the latest release.
 2. Close Ableton and other audio hosts.
 3. Open the PKG and authorize installation when macOS asks.
 4. Reopen your host and rescan VST3 plug-ins if needed.
@@ -17,13 +17,21 @@ The Developer ID signed, Apple-notarized PKG installs the standalone app in `/Ap
 
 If you also have a duplicate personal copy in `~/Library/Audio/Plug-Ins/VST3`, remove that duplicate before restarting your host. ZIP installers remain available on earlier releases. Windows and Intel Mac builds are not included.
 
-For an existing compatible installation (tested with 0.52.7), use **SliceGroups-0.52.8-AppleSilicon-Update.pkg**, approximately **21 MB**. It reuses installed models and libraries. The Update.zip contains the same notarized PKG for in-app update downloads. Use the full PKG for first installation or if dependencies are missing.
+For an existing compatible installation, use **SliceGroups-0.52.14-AppleSilicon-Update.pkg**. This is the smaller download for existing users. It reuses installed models and libraries. The Update.zip contains the same notarized PKG for in-app update downloads. Use the full PKG for first installation or if dependencies are missing.
 
 ## Source
 
 The application source is readable in this repository. Use GitHub’s automatic source download for the current code. Download unchanged dependencies once from the permanent **0.40.2 Source.zip release asset**, which includes full dependency sources, headers, runtime libraries and model weights. MIDI extraction additionally needs the small ONNX dependency ZIP attached to v0.42.3. Similarity weights are published once as DrumSimilarity.pt on v0.43.2. See BUILD.md and THIRD_PARTY.md for exact build steps.
 
 Slice Groups source is licensed under **AGPLv3-or-later**. Dependencies retain their own licenses.
+
+## New in 0.52.14
+
+- Sequencer on/off is saved per group in Ableton project state. Loading loops, Multis and presets preserves it and ignores legacy file values.
+- Auto Continue repeats shorter samples on rounded whole-bar boundaries to fill a longer selected loop region, and keeps the highlighted playing file visible in the browser.
+- Includes the 0.52.9–0.52.13 updates: continuous Auto Continue handoffs at selected loop endpoints, arrangement-wrap timing, Bar Lock preservation, and fixed window dimensions across group changes.
+- Shared library catalogues and metadata rows across instances, lighter idle UI refreshes, limited playhead repainting and dormant Stretch workers until needed.
+- Performance/playback/browser regressions were run for 0.52.13. The final three changes in 0.52.14 were built without running the test suite, as requested.
 
 ## New in 0.52.8
 

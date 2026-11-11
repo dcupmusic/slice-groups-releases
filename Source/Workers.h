@@ -62,10 +62,54 @@ public:
 class BrowserSearchIndex final:public juce::Thread {
     juce::CriticalSection mutex;juce::WaitableEvent wake;juce::File root;bool forceRefresh=false;juce::StringArray changedPaths;std::atomic<uint64_t> revision{0};
 public:
-    struct PreparedView{juce::Array<juce::File> files,folders,direct;std::set<juce::String> folderPaths;std::map<juce::String,int> nameCounts;};
+    struct PreparedView{juce::Array<juce::File> files,folders,direct;std::set<juce::String> folderPaths;};
     std::function<void(juce::File,std::shared_ptr<LocalDatabase::CatalogDelta>,uint64_t)> completedDelta;
-    std::function<void(juce::File,std::shared_ptr<PreparedView>,uint64_t)> completedPrepared;
+    std::function<void(juce::File,std::shared_ptr<const PreparedView>,uint64_t)> completedPrepared;
     std::function<void(juce::File,juce::Array<juce::File>,uint64_t)> completed;
+    inline static std::atomic<uint64_t> preparedBuilds{0}, preparedHits{0};
+    // Immutable catalogue data is shared by windows; selections and filters stay local.
+    static std::shared_ptr<const PreparedView> prepared(juce::File folder,
+            const juce::Array<juce::File>& roots, const std::function<bool()>& cancelled) {
+        struct Cached {juce::String key;uint64_t revision;std::shared_ptr<const PreparedView> view;};
+        static std::mutex cacheMutex;
+        static std::vector<Cached> cache;
+        const std::lock_guard<std::mutex> guard(cacheMutex);
+        if (cancelled()) return {};
+        auto database = LibraryStore::database();
+        const auto revision = database->catalogVersion();
+        juce::String key = LibraryStore::root().getFullPathName() + "\n" + folder.getFullPathName();
+        for (auto root : roots) key += "\n" + root.getFullPathName();
+        for (auto& entry : cache) if (entry.key == key && entry.revision == revision) {
+            ++preparedHits;
+            return entry.view;
+        }
+        for (auto root : roots) if (!database->hasCatalog(root)) return {};
+        auto view = std::make_shared<PreparedView>();
+        auto add = [&](juce::File file, bool directory) {
+            if (file.getParentDirectory() == folder) view->direct.add(file);
+            if (directory) {view->folders.add(file);view->folderPaths.insert(file.getFullPathName());}
+            else view->files.add(file);
+        };
+        std::set<juce::String> seen;
+        for (auto root : roots) {
+            if (folder == LibraryStore::browserRoot() && seen.insert(root.getFullPathName()).second) add(root, true);
+            for (const auto& row : database->catalogRows(root)) {
+                if (cancelled()) return {};
+                if (seen.insert(row.path).second) add(juce::File(row.path), row.folder);
+            }
+        }
+        struct Sort {int compareElements(const juce::File& a,const juce::File& b) const {
+            int order=a.getFileName().compareIgnoreCase(b.getFileName());
+            return order?order:a.getFullPathName().compareIgnoreCase(b.getFullPathName());
+        }} sort;
+        view->files.sort(sort);view->folders.sort(sort);view->direct.sort(sort);
+        if (cancelled() || database->catalogVersion() != revision) return {};
+        cache.erase(std::remove_if(cache.begin(),cache.end(),[&](const auto& entry){return entry.key==key;}),cache.end());
+        if (cache.size() >= 4) cache.erase(cache.begin());
+        cache.push_back({key,revision,view});
+        ++preparedBuilds;
+        return view;
+    }
     BrowserSearchIndex():Thread("Slice Groups browser search"){startThread(juce::Thread::Priority::low);}
     ~BrowserSearchIndex()override{signalThreadShouldExit();wake.signal();stopThread(-1);}
     uint64_t request(juce::File folder,bool refresh=false){const juce::ScopedLock g(mutex);root=folder;forceRefresh=refresh;auto token=++revision;wake.signal();return token;}
@@ -92,9 +136,15 @@ public:
     static void store(juce::File root,const juce::Array<juce::File>& files){LibraryStore::database()->setCatalog(root,files);}
     static juce::Array<juce::File> cached(juce::File root){try{return LibraryStore::database()->catalog(root);}catch(...){return {};}}
     void run()override{uint64_t last=0;while(!threadShouldExit()){wake.wait(100);if(threadShouldExit())break;juce::File folder;uint64_t token;bool refresh;juce::StringArray changes;{const juce::ScopedLock g(mutex);folder=root;token=revision.load();refresh=forceRefresh;changes.swapWith(changedPaths);}if(token==last)continue;last=token;if(!changes.isEmpty()&&!changes.contains("*")&&completedDelta){try{auto delta=changesFor(changes);auto callback=completedDelta;juce::MessageManager::callAsync([callback,folder,delta,token]{callback(folder,delta,token);});LibraryStore::database()->applyCatalogDelta(*delta);}catch(const std::exception& e){std::cerr<<"Browser delta: "<<e.what()<<"\n";}continue;}if(!folder.isDirectory())continue;auto cancelled=[&]{return threadShouldExit()||revision.load()!=token;};auto roots=folder==LibraryStore::browserRoot()?LibraryStore::libraryRoots():juce::Array<juce::File>{folder};auto deliver=[&](juce::Array<juce::File> found){auto callback=completed;auto preparedCallback=completedPrepared;
-            if(preparedCallback){auto view=std::make_shared<PreparedView>();for(auto file:found){if(cancelled())return;if(file.getParentDirectory()==folder)view->direct.add(file);if(file.isDirectory()){view->folders.add(file);view->folderPaths.insert(file.getFullPathName());}else{view->files.add(file);++view->nameCounts[file.getFileName().toLowerCase()];}}
+            if(preparedCallback){auto view=std::make_shared<PreparedView>();for(auto file:found){if(cancelled())return;if(file.getParentDirectory()==folder)view->direct.add(file);if(file.isDirectory()){view->folders.add(file);view->folderPaths.insert(file.getFullPathName());}else{view->files.add(file);}}
                 juce::MessageManager::callAsync([preparedCallback,folder,view,token]{preparedCallback(folder,view,token);});
-            }else juce::MessageManager::callAsync([callback,folder,found=std::move(found),token]()mutable{if(callback)callback(folder,std::move(found),token);});};juce::Array<juce::File> stored;bool hasCache=true;for(auto root:roots){hasCache&=indexExists(root);if(folder==LibraryStore::browserRoot())stored.add(root);stored.addArray(cached(root));}
+            }else juce::MessageManager::callAsync([callback,folder,found=std::move(found),token]()mutable{if(callback)callback(folder,std::move(found),token);});};
+            if (completedPrepared) if (auto view = prepared(folder, roots, cancelled)) {
+                auto callback = completedPrepared;
+                juce::MessageManager::callAsync([callback,folder,view,token]{callback(folder,view,token);});
+                if (!refresh && !changes.contains("*")) continue;
+            }
+            juce::Array<juce::File> stored;bool hasCache=true;for(auto root:roots){hasCache&=indexExists(root);if(folder==LibraryStore::browserRoot())stored.add(root);stored.addArray(cached(root));}
 if(hasCache&&!cancelled()){struct Sort{int compareElements(const juce::File&a,const juce::File&b)const{int n=a.getFileName().compareIgnoreCase(b.getFileName());return n?n:a.getFullPathName().compareIgnoreCase(b.getFullPathName());}}sort;stored.sort(sort);for(int i=stored.size()-1;i>0;--i)if(stored[i]==stored[i-1])stored.remove(i);deliver(stored);if(!refresh&&!changes.contains("*"))continue;}juce::Array<juce::File> fresh;for(auto root:roots){if(cancelled())break;if(folder==LibraryStore::browserRoot())fresh.add(root);auto found=enumerate(root,cancelled,true);if(cancelled())break;try{store(root,found);}catch(const std::exception& e){std::cerr<<"Browser index: "<<e.what()<<"\n";}fresh.addArray(found);}if(!cancelled()){struct Sort{int compareElements(const juce::File&a,const juce::File&b)const{int n=a.getFileName().compareIgnoreCase(b.getFileName());return n?n:a.getFullPathName().compareIgnoreCase(b.getFullPathName());}}sort;fresh.sort(sort);for(int i=fresh.size()-1;i>0;--i)if(fresh[i]==fresh[i-1])fresh.remove(i);deliver(std::move(fresh));}}}
 
 };

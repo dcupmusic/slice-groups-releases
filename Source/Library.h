@@ -37,6 +37,20 @@ public:
     static void metadataChanged(const juce::String& name){++kindRevision(name);++metadataRevision();}
     inline static std::atomic<int> diagnosticParseDelayMs{0};
 
+    static juce::Time legacyLoopStamp() {
+        static juce::CriticalSection mutex;
+        static juce::String path;
+        static double checked = -1000;
+        static juce::Time stamp;
+        const juce::ScopedLock guard(mutex);
+        auto current = root().getFullPathName();
+        const double now = juce::Time::getMillisecondCounterHiRes();
+        if (path != current || now - checked >= 1000) {
+            path = current;checked = now;
+            stamp = juce::File(current).getChildFile("loops.json").getLastModificationTime();
+        }
+        return stamp;
+    }
     static uint64_t localRevision(const juce::String& name,bool bump=false){static juce::CriticalSection mutex;static std::map<juce::String,uint64_t> revisions;const juce::ScopedLock guard(mutex);auto& value=revisions[root().getChildFile(name).getFullPathName()];if(bump)++value;return value;}
     static juce::var localSnapshot(const juce::String& name) {
         if(usingDatabase){try{pollDatabase();return database()->snapshot(name);}catch(const std::exception& e){storageError()=e.what();return juce::var(new juce::DynamicObject());}}

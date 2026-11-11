@@ -3,7 +3,7 @@
 
 class StretchWorker final:public juce::Thread{
 public:
- struct Request{std::shared_ptr<const AudioData> audio;int begin=0,end=0,start=0;double tempo=120,host=120,pitch=0;std::shared_ptr<const WarpArrangement> arrangement;int origin=0;std::shared_ptr<const std::map<size_t,size_t>> keyMap;double maxSeconds=600;bool varispeed=false;bool operator==(const Request& x)const{return varispeed==x.varispeed&&audio==x.audio&&begin==x.begin&&end==x.end&&start==x.start&&std::abs(tempo-x.tempo)<.001&&std::abs(host-x.host)<.001&&std::abs(pitch-x.pitch)<.001&&(!arrangement&&!x.arrangement||(arrangement&&x.arrangement&&origin==x.origin&&(*arrangement==*x.arrangement)))&&(!keyMap&&!x.keyMap||(keyMap&&x.keyMap&&*keyMap==*x.keyMap));}};
+ struct Request{std::shared_ptr<const AudioData> audio;int begin=0,end=0,start=0;double tempo=120,host=120,pitch=0;std::shared_ptr<const WarpArrangement> arrangement;int origin=0;std::shared_ptr<const std::map<size_t,size_t>> keyMap;double maxSeconds=600;bool varispeed=false;int repeatFrames=0;bool operator==(const Request& x)const{return repeatFrames==x.repeatFrames&&varispeed==x.varispeed&&audio==x.audio&&begin==x.begin&&end==x.end&&start==x.start&&std::abs(tempo-x.tempo)<.001&&std::abs(host-x.host)<.001&&std::abs(pitch-x.pitch)<.001&&(!arrangement&&!x.arrangement||(arrangement&&x.arrangement&&origin==x.origin&&(*arrangement==*x.arrangement)))&&(!keyMap&&!x.keyMap||(keyMap&&x.keyMap&&*keyMap==*x.keyMap));}};
  struct Result{Request request;juce::AudioBuffer<float> buffer;std::vector<std::pair<size_t,size_t>> playbackMap;bool playbackMapPrepared=false;void prepareMap(){playbackMap.clear();if(request.keyMap)for(auto pair:*request.keyMap)playbackMap.push_back(pair);playbackMapPrepared=true;}};
 private:
  const bool finePreview;const juce::Thread::Priority priority;juce::CriticalSection mutex;juce::WaitableEvent wake;Request wanted;uint64_t serial=0;std::shared_ptr<const Result> ready;std::vector<std::shared_ptr<const Result>> cache;
@@ -15,6 +15,21 @@ public:
  std::shared_ptr<const Result> result(){const juce::ScopedTryLock g(mutex);return g.isLocked()?ready:nullptr;}
  static std::shared_ptr<Result> render(const Request& request,std::function<bool()> cancel={},bool preview=false){
   if(!request.audio||request.end<=request.begin)return {};int frames=request.end-request.begin,channels=juce::jmin(2,request.audio->buffer.getNumChannels());double ratio=request.tempo/request.host;
+  if(request.arrangement&&request.repeatFrames>0){
+   auto repeated=std::make_shared<WarpArrangement>();
+   double period=request.repeatFrames/request.audio->rate*request.tempo/60;
+   double first=(request.begin-request.origin)/request.audio->rate*request.tempo/60;
+   double last=(request.end-request.origin)/request.audio->rate*request.tempo/60;
+   double originalEnd=0;for(const auto& chunk:*request.arrangement)originalEnd=juce::jmax(originalEnd,chunk.end());
+   if(originalEnd<=period+1e-8){
+    for(int cycle=0;cycle<=std::ceil(last/period);++cycle)for(auto chunk:*request.arrangement){
+     for(auto& point:chunk.points)point.beat+=cycle*period;
+     if(chunk.end()>first&&chunk.begin()<last)repeated->push_back(std::move(chunk));
+    }
+   }else *repeated=*request.arrangement;
+   auto child=request;child.repeatFrames=0;child.arrangement=repeated;
+   auto result=render(child,cancel,preview);if(result)result->request=request;return result;
+  }
   if(request.arrangement){
    if(request.host<=0||request.tempo<=0||frames*ratio>request.audio->rate*request.maxSeconds)return {};
    auto result=std::make_shared<Result>();result->request=request;result->prepareMap();int expected=juce::jmax(1,(int)std::round(frames*ratio));result->buffer.setSize(channels,expected);result->buffer.clear();double spb=request.audio->rate*60/request.host,firstBeat=(request.begin-request.origin)/request.audio->rate*request.tempo/60;
@@ -28,7 +43,7 @@ public:
   }
   if(ratio<.03125||ratio>32||frames*ratio>request.audio->rate*request.maxSeconds)return {};
   juce::AudioBuffer<float> input(channels,frames);input.clear();int rotation=juce::jlimit(0,frames-1,request.start-request.begin);
-  for(int ch=0;ch<channels;++ch)for(int n=0;n<frames;++n){int source=request.begin+(rotation+n)%frames;if(source<request.audio->buffer.getNumSamples())input.setSample(ch,n,request.audio->buffer.getSample(ch,source));}
+  for(int ch=0;ch<channels;++ch)for(int n=0;n<frames;++n){int source=request.begin+(rotation+n)%frames;if(request.repeatFrames>0)source%=request.repeatFrames;if(source>=0&&source<request.audio->buffer.getNumSamples())input.setSample(ch,n,request.audio->buffer.getSample(ch,source));}
   if(cancel&&cancel())return {};if(std::abs(ratio-1)<.000001&&std::abs(request.pitch)<.000001&&!request.keyMap){auto result=std::make_shared<Result>();result->request=request;result->prepareMap();result->buffer=std::move(input);return result;}
   if(request.varispeed){auto result=std::make_shared<Result>();result->request=request;result->prepareMap();int count=juce::jmax(1,(int)std::round(frames*ratio));result->buffer.setSize(channels,count);std::vector<std::pair<double,double>> map{{0,0}};if(request.keyMap)for(auto point:*request.keyMap)map.push_back({(double)point.second,(double)point.first});map.push_back({(double)count,(double)frames});size_t interval=1;for(int n=0;n<count;++n){if((n%4096)==0&&cancel&&cancel())return {};while(interval+1<map.size()&&n>=map[interval].first)++interval;auto a=map[interval-1],b=map[interval];double source=a.second+(n-a.first)/juce::jmax(1.,b.first-a.first)*(b.second-a.second);source=juce::jlimit(0.,(double)frames-1,source);int i=(int)source;for(int ch=0;ch<channels;++ch){float x=input.getSample(ch,i),y=input.getSample(ch,juce::jmin(i+1,frames-1));result->buffer.setSample(ch,n,x+(float)(source-i)*(y-x));}}return result;}
   if(request.keyMap&&std::abs(request.pitch)>.000001){auto pitchRequest=request;pitchRequest.keyMap.reset();pitchRequest.host=pitchRequest.tempo;auto pitched=render(pitchRequest,cancel,preview);if(!pitched)return {};input=pitched->buffer;}
