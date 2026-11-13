@@ -1026,3 +1026,7 @@ int runExtraction4100(){juce::ScopedJuceInitialiser_GUI gui;LibraryPreparation::
 #include "PhoneRemoteChecks.h"
 
 #include "Features5217Checks.h"
+
+#include "PhoneRemoteRetentionChecks.h"
+
+#include "FavouriteDisplay519Checks.h"

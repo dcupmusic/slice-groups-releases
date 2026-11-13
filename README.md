@@ -8,7 +8,7 @@ A macOS VST3 instrument for slicing loops, playing one-shots and multisamples, s
 
 Requires an **Apple Silicon Mac running macOS 14 or later**.
 
-1. Download **SliceGroups-0.52.17-AppleSilicon.pkg** from the latest release.
+1. For a fresh installation, download **SliceGroups-0.52.17-AppleSilicon.pkg** from release 0.52.17, then apply the latest small update.
 2. Close Ableton and other audio hosts.
 3. Open the PKG and authorize installation when macOS asks.
 4. Reopen your host and rescan VST3 plug-ins if needed.
@@ -17,15 +17,23 @@ The Developer ID signed PKG installs the standalone app in `/Applications/Slice 
 
 If you also have a duplicate personal copy in `~/Library/Audio/Plug-Ins/VST3`, remove that duplicate before restarting your host. ZIP installers remain available on earlier releases. Windows and Intel Mac builds are not included.
 
-For an existing compatible installation, use **SliceGroups-0.52.17-AppleSilicon-Update.pkg**. This is the smaller download for existing users. It reuses installed models and libraries. The Update.zip contains the same signed PKG for in-app update downloads. Use the full PKG for first installation or if dependencies are missing.
+For an existing compatible installation, use **SliceGroups-0.52.19-AppleSilicon-Update.pkg**. This is the smaller download for existing users. It reuses installed models and libraries. The Update.zip contains the same signed PKG for in-app update downloads. Use the full PKG for first installation or if dependencies are missing.
 
-**0.52.17 is signed but not Apple-notarized.** macOS may require manual approval. Notarization was skipped for this release.
+**0.52.19 is a small, Developer ID signed and Apple-notarized update-only release.** For a fresh installation, use a compatible full installer first, then apply this update. The older full 0.52.17 installer is signed but was not notarized.
 
 ## Source
 
 The application source is readable in this repository. Use GitHub’s automatic source download for the current code. Download unchanged dependencies once from the permanent **0.40.2 Source.zip release asset**, which includes full dependency sources, headers, runtime libraries and model weights. MIDI extraction additionally needs the small ONNX dependency ZIP attached to v0.42.3. Similarity weights are published once as DrumSimilarity.pt on v0.43.2. See BUILD.md and THIRD_PARTY.md for exact build steps.
 
 Slice Groups source is licensed under **AGPLv3-or-later**. Dependencies retain their own licenses.
+
+## New in 0.52.19
+
+- Fixed companion Favourite commands silently failing after a long Auto Continue session: current files are retained and the oldest lookups are evicted.
+- Mac favourite stars refresh independently of long catalogue/metadata jobs, including during Auto Continue. Favourites-only filters use the fresh state.
+- Embedded playback favourites the original library file, and the remote displays errors instead of claiming an unconfirmed save.
+- Refreshes avoid replacing buttons while pressed. Refresh the phone page after updating.
+- Small signed/notarized update installer only; no full-package duplication. Targeted remote/cache and 50,000-row favourite-display checks passed.
 
 ## New in 0.52.17
 
