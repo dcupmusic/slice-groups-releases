@@ -30,14 +30,97 @@ int sequenceTranspose()const{if(!melodicSequencePitchMode()||sequence.key<0||(!k
 int sequencePitch(int pitch)const{if(!melodicSequencePitchMode()||sequence.key<0)return pitch;if(!masterSequenceKey->enabled.load())return juce::jlimit(0,127,pitch+sequenceTranspose());static const int major[]{0,2,4,5,7,9,11},minor[]{0,2,3,5,7,8,10};auto* source=sequence.minor?minor:major;auto* target=masterSequenceKey->minor.load()?minor:major;int relative=pitch-sequence.key,octave=(int)std::floor(relative/12.),pc=(relative%12+12)%12,degree=0,distance=99;for(int i=0;i<7;++i){int d=std::abs(pc-source[i]);if(d<distance){distance=d;degree=i;}}int root=sequence.key+sequenceTranspose();return juce::jlimit(0,127,root+octave*12+target[degree]);}
 SequenceClip sequenceForExport()const{auto clip=sequenceForDisplay();for(auto& n:clip.notes){double end=sequenceSwingBeat(n.beat+n.length);n.beat=sequenceSwingBeat(n.beat);n.length=juce::jmax(.000001,end-n.beat);n.pitch=sequencePitch(n.pitch);}if(melodicSequencePitchMode()&&clip.key>=0&&(keyLocked||masterSequenceKey->enabled.load())){clip.key=effectiveTargetKey();if(masterSequenceKey->enabled.load())clip.minor=masterSequenceKey->minor.load();}return clip;}
 int sequenceKeyState()const{return masterSequenceKey->key.load()+12*(int)masterSequenceKey->minor.load()+24*(int)masterSequenceKey->enabled.load()+48*(int)keyLocked+96*(int)keyAlternate+192*(sequence.key+1)+2496*(int)sequence.minor;}
-void renderSequenceMidi(juce::MidiBuffer& input,double ppq,double step,int frames,bool running){sequenceOutput.clear();sequenceOutputRendered=true;sequenceOutputBlockEnabled=sequenceMidiOut.load();if(!sequenceOutputBlockEnabled)flushSequenceOutput();captureSequenceMidi(input,ppq,step,running,frames);sequenceMidi.clear();sequenceMidi.addEvents(input,0,frames,0);bool active=(sequenceEnabled||(!melodicSliceMode&&extractionPreviewActive))&&running&&step>0;int transpose=sequenceTranspose(),scale=sequenceKeyState();bool reset=sequenceOutputBlockEnabled!=sequenceRenderedOutput||active!=sequenceWasPlaying||(active&&std::abs(ppq-sequenceExpected)>step*2+1e-6)||transpose!=sequenceRenderedTranspose||scale!=sequenceRenderedScale||sequenceRenderedSwing!=(swingEnabled?swingAmount:50)||sequenceRenderedSwingGrid!=sequenceSwingGrid||sequenceRenderedQuantize!=sequenceAutoQuantize||sequenceRenderedMono!=(extractionActive&&extractionOptions.monophonic);bool contentChanged=!sequenceEditGesture&&sequenceRenderedRevision!=sequence.revision;bool refresh=reset||contentChanged;if(refresh){sequencePlayback=sequenceForDisplay();flushSequenceOutput();}
- if(refresh)for(int n=0;n<128;++n)if(sequenceHeld[n]){addSequenceEvent(juce::MidiMessage::noteOff(16,n),0);sequenceHeld[n]=false;}
- if(active){double length=sequencePlayback.beats(),begin=sequencePlayback.loopStart,limit=sequencePlayback.loopEnd(),end=ppq+frames*step;for(int pass=0;pass<2;++pass)for(auto n:sequencePlayback.notes){if(n.beat<begin||n.beat>=limit)continue;int pitch=sequencePitch(n.pitch);double duration=juce::jmin(n.length,limit-n.beat);double onset=juce::jlimit(0.,length,sequenceSwingBeat(n.beat)-begin),offset=juce::jlimit(0.,length,sequenceSwingBeat(n.beat+duration)-begin);if(offset<=onset)continue;long long first=(long long)std::floor((ppq-offset)/length),last=(long long)std::floor((end-onset)/length);for(auto cycle=first;cycle<=last;++cycle){double on=cycle*length+onset,off=cycle*length+offset;if(pass==1&&reset&&on<ppq-1e-9&&off>ppq+1e-9){addSequenceEvent(juce::MidiMessage::noteOn(16,pitch,(juce::uint8)n.velocity),0);sequenceHeld[pitch]=true;}if(pass==1&&on>=ppq-1e-9&&on<end-1e-9){int sample=juce::jlimit(0,frames-1,(int)std::llround((on-ppq)/step));addSequenceEvent(juce::MidiMessage::noteOn(16,pitch,(juce::uint8)n.velocity),sample);sequenceHeld[pitch]=true;}if(pass==0&&off>=ppq-1e-9&&off<end-1e-9){int sample=juce::jlimit(0,frames-1,(int)std::llround((off-ppq)/step));addSequenceEvent(juce::MidiMessage::noteOff(16,pitch),sample);sequenceHeld[pitch]=false;}}}double phase=std::fmod(ppq,length);sequencePosition=begin+(phase<0?phase+length:phase);}
- sequenceExpected=ppq+frames*step;sequenceWasPlaying=active;if(!sequenceEditGesture)sequenceRenderedRevision=sequence.revision;sequenceRenderedTranspose=transpose;sequenceRenderedScale=scale;sequenceRenderedSwing=swingEnabled?swingAmount:50;sequenceRenderedSwingGrid=sequenceSwingGrid;sequenceRenderedQuantize=sequenceAutoQuantize;sequenceRenderedMono=extractionActive&&extractionOptions.monophonic;sequenceRenderedOutput=sequenceOutputBlockEnabled;if(sequencePreviewRequest>=0){if(sequencePreviewHeld>=0)addSequenceEvent(juce::MidiMessage::noteOff(15,sequencePreviewHeld),0);sequencePreviewHeld=sequencePitch(sequencePreviewRequest);sequencePreviewRequest=-1;sequencePreviewFrames=juce::jmax(1,(int)(outputRate*.18));addSequenceEvent(juce::MidiMessage::noteOn(15,sequencePreviewHeld,(juce::uint8)100),0);}if(sequencePreviewHeld>=0){if(sequencePreviewFrames<frames){addSequenceEvent(juce::MidiMessage::noteOff(15,sequencePreviewHeld),juce::jmax(0,sequencePreviewFrames));sequencePreviewHeld=-1;}else sequencePreviewFrames-=frames;}updateSequenceOutputHeld();input.swapWith(sequenceMidi);}
-bool loadSequence(juce::File file){{const juce::ScopedLock g(lock);if(sequence.path==file.getFullPathName()&&sequence.dirty){sequenceView=true;return true;}}queueSequenceAutoSave(true);SequenceClip clip;if(!clip.load(file))return false;const juce::ScopedLock g(lock);if(stretchMode&&!oneShotMode)setPlaybackMode(0);extractionActive=extractionMidiAudition=sequenceAutoQuantize=false;clip.revision=sequence.revision+1;++sequenceIdentity510;sequence=std::move(clip);sequenceWasPlaying=false;sequenceEnabled=sequenceView=true;playMode=false;recordHistory();return true;}
+void renderSequenceSpan(double ppq,double step,int frames,int frameOffset,bool resume,double cutoff=std::numeric_limits<double>::infinity()) {
+    const double length=sequencePlayback.beats(),begin=sequencePlayback.loopStart,limit=sequencePlayback.loopEnd();
+    const double end=juce::jmin(ppq+frames*step,cutoff);
+    for(int pass=0;pass<2;++pass)for(const auto& note:sequencePlayback.notes){
+        if(note.beat<begin||note.beat>=limit)continue;
+        const int pitch=sequencePitch(note.pitch);
+        const double duration=juce::jmin(note.length,limit-note.beat);
+        const double onset=juce::jlimit(0.,length,sequenceSwingBeat(note.beat)-begin);
+        const double offset=juce::jlimit(0.,length,sequenceSwingBeat(note.beat+duration)-begin);
+        if(offset<=onset)continue;
+        const auto first=(long long)std::floor((ppq-sequenceOrigin-offset)/length);
+        const auto last=(long long)std::floor((end-sequenceOrigin-onset)/length);
+        for(auto cycle=first;cycle<=last;++cycle){
+            double on=sequenceOrigin+cycle*length+onset,off=sequenceOrigin+cycle*length+offset;
+            if(pass==1&&resume&&on<ppq-1e-9&&off>ppq+1e-9)
+                addSequenceEvent(juce::MidiMessage::noteOn(16,pitch,(juce::uint8)note.velocity),frameOffset);
+            if(pass==1&&on>=ppq-1e-9&&on<end-1e-9)
+                addSequenceEvent(juce::MidiMessage::noteOn(16,pitch,(juce::uint8)note.velocity),frameOffset+juce::jlimit(0,frames-1,(int)std::llround((on-ppq)/step)));
+            if(pass==0&&off>=ppq-1e-9&&off<end-1e-9)
+                addSequenceEvent(juce::MidiMessage::noteOff(16,pitch),frameOffset+juce::jlimit(0,frames-1,(int)std::llround((off-ppq)/step)));
+        }
+    }
+    // Apply generated events in time order, including notes that start and end in this span.
+    for(auto event:sequenceMidi)if(event.samplePosition>=frameOffset&&event.samplePosition<frameOffset+frames){
+        auto message=event.getMessage();
+        if(message.getChannel()==16&&message.isNoteOnOrOff())sequenceHeld[message.getNoteNumber()]=message.isNoteOn();
+    }
+    updateSequenceOutputHeld();
+}
+void renderSequenceMidi(juce::MidiBuffer& input,double ppq,double step,int frames,bool running){
+    sequenceOutput.clear();sequenceOutputRendered=true;sequenceOutputBlockEnabled=sequenceMidiOut.load();
+    if(!sequenceOutputBlockEnabled)flushSequenceOutput();
+    captureSequenceMidi(input,ppq,step,running,frames);
+    sequenceMidi.clear();sequenceMidi.addEvents(input,0,frames,0);
+    bool continuing=autoContinue&&sequenceEnabled&&sequence.path.isNotEmpty()&&SequenceClip::midi(juce::File(sequence.path))&&!isNonRealtime();
+    if(!continuing||!running||!sequenceEnabled){midiAdvanceArmed=false;midiAdvancePaused=false;if(!running)sequenceOrigin=0;}
+    bool active=(sequenceEnabled||(!melodicSliceMode&&extractionPreviewActive))&&running&&step>0&&!midiAdvancePaused;
+    int transpose=sequenceTranspose(),scale=sequenceKeyState();
+    bool reset=sequenceOutputBlockEnabled!=sequenceRenderedOutput||active!=sequenceWasPlaying
+        ||(active&&std::abs(ppq-sequenceExpected)>step*2+1e-6)||transpose!=sequenceRenderedTranspose
+        ||scale!=sequenceRenderedScale||sequenceRenderedSwing!=(swingEnabled?swingAmount:50)
+        ||sequenceRenderedSwingGrid!=sequenceSwingGrid||sequenceRenderedQuantize!=sequenceAutoQuantize
+        ||sequenceRenderedMono!=(extractionActive&&extractionOptions.monophonic);
+    bool contentChanged=!sequenceEditGesture&&sequenceRenderedRevision!=sequence.revision;
+    if(reset||contentChanged){sequencePlayback=sequenceForDisplay();releaseSequenceAt(0);}
+    if(continuing&&(reset||contentChanged||!midiAdvanceWasEnabled))midiAdvanceArmed=false;
+    midiAdvanceWasEnabled=continuing;
+    if(active){
+        if(continuing&&!midiAdvanceArmed){
+            midiAdvanceEnd=sequenceOrigin+(std::floor((ppq-sequenceOrigin)/sequencePlayback.beats()+1e-9)+1)*sequencePlayback.beats();
+            midiAdvanceArmed=true;
+        }
+        int frame=0;bool resume=reset;
+        while(frame<frames){
+            double beat=ppq+frame*step;
+            if(continuing&&beat+1e-9>=midiAdvanceEnd){
+                bool advanced=advanceMidiAt(beat,frame);
+                if(midiAdvancePaused)break;
+                if(!advanced)midiAdvanceEnd+=sequencePlayback.beats();
+                resume=!advanced;
+            }
+            int count=frames-frame;
+            if(continuing)count=juce::jmin(count,juce::jmax(1,(int)std::ceil((midiAdvanceEnd-beat)/step-1e-7)));
+            renderSequenceSpan(beat,step,count,frame,resume,continuing?midiAdvanceEnd:std::numeric_limits<double>::infinity());
+            frame+=count;resume=false;
+        }
+        double phase=std::fmod(ppq-sequenceOrigin,sequencePlayback.beats());
+        sequencePosition=sequencePlayback.loopStart+(phase<0?phase+sequencePlayback.beats():phase);
+    }
+    sequenceExpected=ppq+frames*step;sequenceWasPlaying=active&&!midiAdvancePaused;
+    if(!sequenceEditGesture)sequenceRenderedRevision=sequence.revision;
+    sequenceRenderedTranspose=sequenceTranspose();sequenceRenderedScale=sequenceKeyState();
+    sequenceRenderedSwing=swingEnabled?swingAmount:50;sequenceRenderedSwingGrid=sequenceSwingGrid;
+    sequenceRenderedQuantize=sequenceAutoQuantize;sequenceRenderedMono=extractionActive&&extractionOptions.monophonic;
+    sequenceRenderedOutput=sequenceOutputBlockEnabled;
+    if(sequencePreviewRequest>=0){
+        if(sequencePreviewHeld>=0)addSequenceEvent(juce::MidiMessage::noteOff(15,sequencePreviewHeld),0);
+        sequencePreviewHeld=sequencePitch(sequencePreviewRequest);sequencePreviewRequest=-1;
+        sequencePreviewFrames=juce::jmax(1,(int)(outputRate*.18));
+        addSequenceEvent(juce::MidiMessage::noteOn(15,sequencePreviewHeld,(juce::uint8)100),0);
+    }
+    if(sequencePreviewHeld>=0){
+        if(sequencePreviewFrames<frames){addSequenceEvent(juce::MidiMessage::noteOff(15,sequencePreviewHeld),juce::jmax(0,sequencePreviewFrames));sequencePreviewHeld=-1;}
+        else sequencePreviewFrames-=frames;
+    }
+    updateSequenceOutputHeld();input.swapWith(sequenceMidi);
+}
+bool loadSequence(juce::File file){{const juce::ScopedLock g(lock);if(sequence.path==file.getFullPathName()&&sequence.dirty){sequenceView=true;return true;}}queueSequenceAutoSave(true);SequenceClip clip;if(!clip.load(file))return false;const juce::ScopedLock g(lock);if(stretchMode&&!oneShotMode)setPlaybackMode(0);extractionActive=extractionMidiAudition=sequenceAutoQuantize=false;clip.revision=sequence.revision+1;++sequenceIdentity510;sequence=std::move(clip);resetMidiAdvance();sequenceWasPlaying=false;sequenceEnabled=sequenceView=true;playMode=false;recordHistory();return true;}
 void sequenceFromSlices(){const juce::ScopedLock g(lock);bool wasEnabled=sequenceEnabled;sequenceEnabled=false;double heldSwing=swingAmount;swingAmount=50;auto file=makeMidi(hasHost?hostBpm:sourceBpm,false);swingAmount=heldSwing;sequenceEnabled=wasEnabled;SequenceClip clip;if(clip.fromMidi(file)){clip.revision=sequence.revision+1;sequence=std::move(clip);sequence.key=-1;sequenceEnabled=true;playMode=false;}}
 
-void copySequenceRuntime(Processor& target)const{target.sequencePreviewHeld=sequencePreviewHeld;target.sequencePreviewFrames=sequencePreviewFrames;target.sequenceExternalHeld=sequenceExternalHeld;target.sequenceRenderedOutput=sequenceRenderedOutput;bool copy=target.sequenceRenderedRevision!=sequenceRenderedRevision||target.sequenceRenderedQuantize!=sequenceRenderedQuantize||target.sequenceRenderedMono!=sequenceRenderedMono||target.sequenceRenderedSwingGrid!=sequenceRenderedSwingGrid||target.sequencePlayback.revision!=sequencePlayback.revision;target.sequenceHeld=sequenceHeld;target.sequenceExpected=sequenceExpected;target.sequenceWasPlaying=sequenceWasPlaying;target.sequenceRenderedRevision=sequenceRenderedRevision;target.sequenceRenderedTranspose=sequenceRenderedTranspose;target.sequenceRenderedScale=sequenceRenderedScale;target.sequenceRenderedSwing=sequenceRenderedSwing;target.sequenceRenderedSwingGrid=sequenceRenderedSwingGrid;target.sequenceRenderedQuantize=sequenceRenderedQuantize;target.sequenceRenderedMono=sequenceRenderedMono;if(copy)target.sequencePlayback=sequencePlayback;target.sequencePosition=sequencePosition.load();}
+void copySequenceRuntime(Processor& target)const{target.sequenceOrigin=sequenceOrigin;target.sequencePreviewHeld=sequencePreviewHeld;target.sequencePreviewFrames=sequencePreviewFrames;target.sequenceExternalHeld=sequenceExternalHeld;target.sequenceRenderedOutput=sequenceRenderedOutput;bool copy=target.sequenceRenderedRevision!=sequenceRenderedRevision||target.sequenceRenderedQuantize!=sequenceRenderedQuantize||target.sequenceRenderedMono!=sequenceRenderedMono||target.sequenceRenderedSwingGrid!=sequenceRenderedSwingGrid||target.sequencePlayback.revision!=sequencePlayback.revision;target.sequenceHeld=sequenceHeld;target.sequenceExpected=sequenceExpected;target.sequenceWasPlaying=sequenceWasPlaying;target.sequenceRenderedRevision=sequenceRenderedRevision;target.sequenceRenderedTranspose=sequenceRenderedTranspose;target.sequenceRenderedScale=sequenceRenderedScale;target.sequenceRenderedSwing=sequenceRenderedSwing;target.sequenceRenderedSwingGrid=sequenceRenderedSwingGrid;target.sequenceRenderedQuantize=sequenceRenderedQuantize;target.sequenceRenderedMono=sequenceRenderedMono;if(copy)target.sequencePlayback=sequencePlayback;target.sequencePosition=sequencePosition.load();}
 void copySequenceConfiguration(Processor& target)const{target.sequenceEditGesture=sequenceEditGesture;target.sequenceMidiOut=sequenceMidiOut.load();if(target.sequence.revision!=sequence.revision||target.sequence.notes.size()!=sequence.notes.size())target.sequence=sequence;target.sequenceEnabled=sequenceEnabled||extractionPreviewActive;target.sequenceAutoQuantize=sequenceAutoQuantize;target.extractionActive=extractionActive;target.extractionOptions=extractionOptions;target.keyLocked=keyLocked;target.targetKey=targetKey;target.keyAlternate=keyAlternate;target.masterSequenceKey=masterSequenceKey;target.sequenceSwingGrid=sequenceSwingGrid;target.swingEnabled=swingEnabled;target.swingAmount=swingAmount;}
 
 void persistSequenceKeyMetadata(){juce::File file(sequence.path);if(!sequence.path.isEmpty()&&SequenceClip::midi(file)&&LibraryStore::editable(file))LibraryStore::queueMusicalKeys({file},sequence.manualKey?MusicalKey{sequence.key,sequence.key<0?-1:sequence.minor?1:0}:MusicalKey{});}
@@ -47,3 +130,7 @@ bool queueSequenceAutoSave(bool switching=false){
  SequenceClip snapshot;juce::File file;uint64_t ticket=0,identity=0;{const juce::ScopedLock g(lock);if(parameterBusy||!autoSave||!sequence.dirty||sequence.path.isEmpty()||sequenceEditGesture||(!switching&&(editDepth>0||juce::Time::getMillisecondCounterHiRes()-sequence.changedAt<800)))return false;file=juce::File(sequence.path);if(!SequenceClip::midi(file)||(sequenceSaveQueuedPath==sequence.path&&sequenceSaveQueuedRevision==sequence.revision))return false;snapshot=sequence;identity=sequenceIdentity510;sequenceSaveQueuedPath=sequence.path;sequenceSaveQueuedRevision=sequence.revision;ticket=MidiSaveTickets510::ticket(file);++sequenceSavesBusy;}
  autoSavePool.addJob([this,snapshot=std::move(snapshot),file,ticket,identity]()mutable{auto revision=snapshot.revision;bool ok=MidiSaveTickets510::write(snapshot,file,ticket,true);bool current=MidiSaveTickets510::current(file,ticket);{const juce::ScopedLock g(lock);if(sequence.path==file.getFullPathName()&&sequence.revision==revision&&sequenceIdentity510==identity&&ok&&current)sequence.dirty=false;if(!ok&&current)sequenceSaveError="Could not autosave MIDI: "+file.getFileName()+" (missing or read-only).";}--sequenceSavesBusy;});return true;
 }
+
+#include "ProcessorMidiAdvance.h"
+
+bool writeSequenceMidi517(juce::File file){juce::MidiFile midi;{const juce::ScopedLock guard(lock);if(sequence.notes.empty())return false;midi=sequenceForExport().midiFile();}juce::FileOutputStream stream(file);if(!stream.openedOk()||!stream.setPosition(0)||!stream.truncate().wasOk())return false;return midi.writeTo(stream);}

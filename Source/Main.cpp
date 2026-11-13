@@ -1020,3 +1020,9 @@ int runExtraction4100(){juce::ScopedJuceInitialiser_GUI gui;LibraryPreparation::
 #include "Features529Checks.h"
 
 #include "MultiWindowChecks.h"
+
+#include "MidiContinueChecks.h"
+
+#include "PhoneRemoteChecks.h"
+
+#include "Features5217Checks.h"

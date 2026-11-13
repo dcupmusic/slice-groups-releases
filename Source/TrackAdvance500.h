@@ -36,7 +36,7 @@ double advancePreparedRate = 0;
 bool advanceBusy = false, advanceBrowserPending = false;
 uint64_t advanceTypeRevision = 0;
 double advanceLoopOrigin = 0, advanceLoopEnd = 0, advanceExpectedBeat = 0, advanceLoopLength = 0;
-bool advanceLoopArmed = false;
+bool advanceLoopArmed = false, advanceLate = false;
 std::atomic<double> advanceLastStartCheck{std::numeric_limits<double>::quiet_NaN()};
 
 // Audio-thread clock for Auto Continue. Keep elapsed project beats through a
@@ -49,6 +49,7 @@ double advanceClock(double raw, const juce::AudioPlayHead::PositionInfo& positio
                     double step, int frames) {
     advanceHostWrapped = false;
     if (!autoContinue || !position.getIsPlaying() || isNonRealtime()) {
+        advanceLate=false;
         advanceCycleOffset = 0;
         advanceExpectedRaw = std::numeric_limits<double>::quiet_NaN();
         return raw;
@@ -66,7 +67,7 @@ double advanceClock(double raw, const juce::AudioPlayHead::PositionInfo& positio
                 && std::abs(raw + cycle - advanceExpectedRaw) <= tolerance;
             if (advanceHostWrapped) advanceCycleOffset += advanceExpectedRaw - raw;
         }
-        if (!advanceHostWrapped) advanceCycleOffset = 0;
+        if (!advanceHostWrapped) {advanceCycleOffset = 0;advanceLate=false;}
     }
     advanceExpectedRaw = raw + frames * step;
     return raw + advanceCycleOffset;
@@ -97,6 +98,8 @@ void setAutoContinue(bool enabled) {
     const juce::ScopedLock guard(lock);
     if (autoContinue == enabled) return;
     autoContinue = enabled;
+    advanceLate=false;
+    resetMidiAdvance();
     ++advanceBrowserRevision;
     trackReachedEnd = false;
     advanceLoopArmed = false;
@@ -105,6 +108,7 @@ void setAutoContinue(bool enabled) {
     edited(false);
 }
 void resetAdvancePlayback(bool successor = false) {
+    advanceLate=false;
     trackReachedEnd = false;
     trackCuePaused = successor;
     advanceNeedsStart = false;
@@ -184,13 +188,14 @@ void renderAdvance(AdvanceReady& ready, juce::AudioBuffer<float>& out, int frame
 bool handoffAdvance(juce::AudioBuffer<float>& out, int frame,
                     const juce::AudioPlayHead::PositionInfo& position, double beat, bool locked) {
     auto result = advanceBoundary(locked);
-    if (result == AdvanceBoundary::pending) return false;
+    if (result == AdvanceBoundary::pending) {advanceLate=true;return false;}
     reachedAdvanceEnd(beat);
     if (result == AdvanceBoundary::stop) trackReachedEnd = false;
     if (result == AdvanceBoundary::ready) {
         auto& ready = *advanceReady;
-        ready.origin = beat;
-        ready.renderer->advanceLoopOrigin = beat;
+        ready.origin = advanceLate ? 0. : beat;
+        ready.renderer->advanceLoopOrigin = ready.origin;
+        if(advanceLate&&ready.renderer->trackMode){auto session=std::atomic_load(&ready.renderer->trackPlayer.session);if(session&&session->loop){double length=session->loopEnd-session->loopBegin;if(length>0)ready.renderer->trackPlayer.queueSeek(session->loopBegin+std::fmod(std::fmod(beat,length)+length,length),false);}else ready.renderer->trackPlayer.queueSeek((session?session->firstBeat:0.)+std::fmod(std::fmod(beat,4.)+4.,4.),false);}
         advanceBridge.store(&ready);
         renderAdvance(ready, out, frame, position, beat);
     }

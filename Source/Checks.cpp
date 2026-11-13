@@ -1,3 +1,5 @@
+int runFeatures5217();
+int runPhoneRemoteSmoke();
 int runPortable526Performance(bool preset=false);
 int runFeatures526();
 int runFeatures525();
@@ -162,9 +164,13 @@ int runSliceGroupsTransportChecks();
 int runSliceGroupsGuiCheck(const char*);
 int runFeatures527();
 int runFeatures528();
+int runMidiContinueChecks();
 int runMultiWindowChecks();
 int runFeatures529();
 int main(int argc,char** argv) {
+    if(argc==2&&std::string(argv[1])=="--features5217-check")return runFeatures5217();
+    if(argc==2&&std::string(argv[1])=="--phone-remote-smoke")return runPhoneRemoteSmoke();
+    if(argc==2&&std::string(argv[1])=="--midi-continue-check")return runMidiContinueChecks();
     if(argc==2&&std::string(argv[1])=="--multi-window-check")return runMultiWindowChecks();
     if(argc==2&&std::string(argv[1])=="--features529-check")return runFeatures529();
     if(argc==2&&std::string(argv[1])=="--features528-check")return runFeatures528();

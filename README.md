@@ -8,22 +8,33 @@ A macOS VST3 instrument for slicing loops, playing one-shots and multisamples, s
 
 Requires an **Apple Silicon Mac running macOS 14 or later**.
 
-1. Download **SliceGroups-0.52.14-AppleSilicon.pkg** from the latest release.
+1. Download **SliceGroups-0.52.17-AppleSilicon.pkg** from the latest release.
 2. Close Ableton and other audio hosts.
 3. Open the PKG and authorize installation when macOS asks.
 4. Reopen your host and rescan VST3 plug-ins if needed.
 
-The Developer ID signed, Apple-notarized PKG installs the standalone app in `/Applications/Slice Groups.app` and the full VST3 and stem models into `/Library/Audio/Plug-Ins/VST3/Slice Groups.vst3` for all users. It can replace an existing system installation with administrator authorization. Your samples, tags, presets and settings are preserved. No Python or model download is needed.
+The Developer ID signed PKG installs the standalone app in `/Applications/Slice Groups.app` and the full VST3 and stem models into `/Library/Audio/Plug-Ins/VST3/Slice Groups.vst3` for all users. It can replace an existing system installation with administrator authorization. Your samples, tags, presets and settings are preserved. No Python or model download is needed.
 
 If you also have a duplicate personal copy in `~/Library/Audio/Plug-Ins/VST3`, remove that duplicate before restarting your host. ZIP installers remain available on earlier releases. Windows and Intel Mac builds are not included.
 
-For an existing compatible installation, use **SliceGroups-0.52.14-AppleSilicon-Update.pkg**. This is the smaller download for existing users. It reuses installed models and libraries. The Update.zip contains the same notarized PKG for in-app update downloads. Use the full PKG for first installation or if dependencies are missing.
+For an existing compatible installation, use **SliceGroups-0.52.17-AppleSilicon-Update.pkg**. This is the smaller download for existing users. It reuses installed models and libraries. The Update.zip contains the same signed PKG for in-app update downloads. Use the full PKG for first installation or if dependencies are missing.
+
+**0.52.17 is signed but not Apple-notarized.** macOS may require manual approval. Notarization was skipped for this release.
 
 ## Source
 
 The application source is readable in this repository. Use GitHub’s automatic source download for the current code. Download unchanged dependencies once from the permanent **0.40.2 Source.zip release asset**, which includes full dependency sources, headers, runtime libraries and model weights. MIDI extraction additionally needs the small ONNX dependency ZIP attached to v0.42.3. Similarity weights are published once as DrumSimilarity.pt on v0.43.2. See BUILD.md and THIRD_PARTY.md for exact build steps.
 
 Slice Groups source is licensed under **AGPLv3-or-later**. Dependencies retain their own licenses.
+
+## New in 0.52.17
+
+- Audio Auto Continue hands off as soon as a late successor is ready, keeping project-aligned playback. Early successors retain seamless region-end transitions.
+- Browser scrolling stays under your control between file loads. Original library locations survive new embedded Set saves.
+- Per-group Waveform/MIDI searches, tags, filters, sorting and browsing scope are saved in the Ableton Set.
+- MIDI drag-out works in Sequencer view, and the MIDI button exports the current region with effective Key Lock/Master Key transposition, even without loaded audio.
+- Includes 0.52.15–0.52.16: seamless MIDI Auto Continue, normal MIDI pitch labels, and a simple multi-instance iPhone Safari remote with Favourite and Previous/Next. Open Settings → Phone Remote, then add it to the iPhone Home Screen. See Remote/README.md.
+- Focused playback, MIDI, Set-recall and 50,000-file browser checks passed. Includes VST3 and standalone. No Apple notarization for this release.
 
 ## New in 0.52.14
 
