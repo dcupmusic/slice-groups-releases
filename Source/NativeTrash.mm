@@ -1,3 +1,5 @@
+#include <mutex>
+#include <map>
 #include "NativeTrash.h"
 #import <Foundation/Foundation.h>
 #import <AppKit/AppKit.h>
@@ -31,3 +33,10 @@ LibraryWatch::LibraryWatch():impl(std::make_unique<Impl>()){}
 LibraryWatch::~LibraryWatch()=default;
 void LibraryWatch::setRoots(const juce::Array<juce::File>& files){juce::StringArray roots;for(auto file:files)roots.add(file.getFullPathName());if(roots==impl->roots)return;impl->stop();impl->roots=roots;if(roots.isEmpty())return;@autoreleasepool{NSMutableArray* paths=[NSMutableArray array];for(auto root:roots)[paths addObject:[NSString stringWithUTF8String:root.toRawUTF8()]];FSEventStreamContext context{0,impl.get(),nullptr,nullptr,nullptr};impl->stream=FSEventStreamCreate(nullptr,Impl::events,&context,(__bridge CFArrayRef)paths,kFSEventStreamEventIdSinceNow,.25,kFSEventStreamCreateFlagFileEvents|kFSEventStreamCreateFlagNoDefer);if(impl->stream){FSEventStreamSetDispatchQueue(impl->stream,impl->queue);if(!FSEventStreamStart(impl->stream)){FSEventStreamInvalidate(impl->stream);FSEventStreamRelease(impl->stream);impl->stream=nullptr;}}}}
 juce::StringArray LibraryWatch::takeChanges(){const juce::ScopedLock lock(impl->mutex);juce::StringArray out;out.swapWith(impl->pending);return out;}
+
+// Called exclusively by browser workers. Cache shared across editors and instances.
+juce::int64 NativeTrash::dateAdded(const juce::File& file){
+ static std::mutex mutex;static std::map<juce::String,juce::int64> cache;
+ std::lock_guard<std::mutex> lock(mutex);auto path=file.getFullPathName();auto found=cache.find(path);if(found!=cache.end())return found->second;
+ juce::int64 value=0;@autoreleasepool{auto url=CFURLCreateFromFileSystemRepresentation(nullptr,(const UInt8*)path.toRawUTF8(),path.getNumBytesAsUTF8(),false);if(url){auto item=MDItemCreateWithURL(nullptr,url);if(item){auto date=MDItemCopyAttribute(item,CFSTR("kMDItemDateAdded"));if(date){if(CFGetTypeID(date)==CFDateGetTypeID())value=(juce::int64)((CFDateGetAbsoluteTime((CFDateRef)date)+kCFAbsoluteTimeIntervalSince1970)*1000.0);CFRelease(date);}CFRelease(item);}CFRelease(url);}}cache[path]=value;return value;
+}

@@ -19,7 +19,7 @@ If you also have a duplicate personal copy in `~/Library/Audio/Plug-Ins/VST3`, r
 
 For an existing compatible installation, use **SliceGroups-0.52.19-AppleSilicon-Update.pkg**. This is the smaller download for existing users. It reuses installed models and libraries. The Update.zip contains the same signed PKG for in-app update downloads. Use the full PKG for first installation or if dependencies are missing.
 
-**0.52.19 is a small, Developer ID signed and Apple-notarized update-only release.** For a fresh installation, use a compatible full installer first, then apply this update. The older full 0.52.17 installer is signed but was not notarized.
+**0.52.20 is a small, Developer ID signed and Apple-notarized update-only release.** For a fresh installation, use a compatible full installer first, then apply this update. The older full 0.52.17 installer is signed but was not notarized.
 
 ## Source
 
@@ -220,3 +220,9 @@ Slice Groups source is licensed under **AGPLv3-or-later**. Dependencies retain t
 - Missing weights download on first stem use, in a background worker, with size/SHA-256 verification and atomic installation. Models are retained in `~/Library/Application Support/Slice Groups/Models/scnet-v1/`.
 - In-app update checks prefer the lightweight update.
 - Source is available through GitHub’s automatic source archives. Unchanged dependency sources are kept in the permanent 0.40.2 source asset; see BUILD.md.
+
+
+## User guides
+
+[Quickstart](Docs/Quickstart.md) · [Hotkeys and mouse gestures](Docs/Hotkeys.md)
+Both guides are also available offline from Settings.

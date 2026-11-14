@@ -1,3 +1,4 @@
+int runFeatures5220();
 int runFavouriteDisplay519Checks();
 int runPhoneRemoteRetentionChecks();
 int runFeatures5217();
@@ -170,6 +171,7 @@ int runMidiContinueChecks();
 int runMultiWindowChecks();
 int runFeatures529();
 int main(int argc,char** argv) {
+    if(argc==2&&std::string(argv[1])=="--features5220-check")return runFeatures5220();
     if(argc==2&&std::string(argv[1])=="--favourite-display519-check")return runFavouriteDisplay519Checks();
     if(argc==2&&std::string(argv[1])=="--phone-remote-retention-check")return runPhoneRemoteRetentionChecks();
     if(argc==2&&std::string(argv[1])=="--features5217-check")return runFeatures5217();
