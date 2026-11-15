@@ -60,9 +60,9 @@ void serviceMidiAdvance() {
     ready->browser=midiAdvanceBrowser;ready->config=configRevision;ready->generation=midiAdvanceGeneration;
     auto order=midiAdvanceOrder;auto current=juce::File(sequence.path);
     const bool quantise=sequenceAutoQuantize,mono=extractionActive&&extractionOptions.monophonic;
-    const double grid=sequenceSwingGrid;
+    const double grid=sequenceSwingGrid;const bool lengthLocked=sequenceLengthLocked;const double lockedLength=sequenceLockedBeats;
     midiAdvanceBusy=true;
-    midiAdvancePool->addJob([this,ready,order,current,quantise,mono,grid]{
+    midiAdvancePool->addJob([this,ready,order,current,quantise,mono,grid,lengthLocked,lockedLength]{
         int row=order->indexOf(current);
         for(int i=row+1;row>=0&&i<order->size()&&!midiAdvanceCancelled;++i){
             auto file=LibraryStore::resolveFile((*order)[i]);
@@ -76,7 +76,7 @@ void serviceMidiAdvance() {
                 note.beat=juce::jlimit(ready->playback.loopStart,ready->playback.loopEnd()-.000001,SequenceClip::snapped(note.beat,grid,false));
                 note.length=juce::jmin(note.length,ready->playback.loopEnd()-note.beat);
             }
-            if(mono)ready->playback.makeMonophonic();
+            if(mono)ready->playback.makeMonophonic();if(lengthLocked)ready->playback=ready->playback.repeatedTo(lockedLength);
             ready->playable=true;
             break;
         }

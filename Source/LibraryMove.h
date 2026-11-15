@@ -4,13 +4,13 @@
 // Background-only file and folder moves. Never overwrite a destination or modify a friend's library.
 struct LibraryMove {
  static juce::Result perform(juce::Array<juce::File> sources,juce::File destination,juce::Array<juce::File>& moved,juce::String renamed={}){
-  renamed=renamed.trim();if(!renamed.isEmpty()&&(sources.size()!=1||renamed=="."||renamed==".."||renamed.containsAnyOf("/\\:")))return juce::Result::fail("Enter a valid folder name.");
+  renamed=renamed.trim();if(!renamed.isEmpty()&&(sources.size()!=1||renamed=="."||renamed==".."||renamed.containsAnyOf("/\\:")))return juce::Result::fail("Enter a valid name.");
   destination=LibraryCopy::canonical(destination);
   if(!destination.isDirectory()||(!LibraryStore::inLibrary(destination)&&!(renamed.isNotEmpty()&&sources.size()==1&&LibraryStore::libraryRoots().contains(sources[0])&&sources[0].getParentDirectory()==destination))||!LibraryCopy::writableDestination(destination))return juce::Result::fail("Choose an editable library folder.");
   juce::Array<juce::File> selected;std::set<juce::String> reserved;
   juce::Array<juce::File> inputs;for(auto input:sources)inputs.addIfNotAlreadyThere(LibraryCopy::canonical(LibraryStore::resolveFile(input)));
   for(auto source:inputs){bool nested=false;for(auto other:inputs)if(other!=source&&source.isAChildOf(other))nested=true;if(nested)continue;
-   if(!source.exists()||source.isSymbolicLink()||(!source.isDirectory()&&source.hasFileExtension("sfz")))return juce::Result::fail("Choose audio files or folders. Move an SFZ together with its containing folder.");
+   if(!source.exists()||source.isSymbolicLink()||(!source.isDirectory()&&source.hasFileExtension("sfz")&&(renamed.isEmpty()||source.getParentDirectory()!=destination)))return juce::Result::fail("Choose audio files or folders. Move an SFZ together with its containing folder.");
    if(source==destination||destination.isAChildOf(source))return juce::Result::fail("A folder cannot be moved into itself or its subfolders.");
    if(!LibraryCopy::writableDestination(source)||!LibraryStore::editable(source))return juce::Result::fail("Shared libraries are read-only. Use Copy to My Library instead.");
    if(source.isDirectory()&&source.getChildFile(".slicegroups").exists())return juce::Result::fail("Move shared library roots in Finder, then use Relocate Library.");

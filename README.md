@@ -19,7 +19,7 @@ If you also have a duplicate personal copy in `~/Library/Audio/Plug-Ins/VST3`, r
 
 For an existing compatible installation, use **SliceGroups-0.52.19-AppleSilicon-Update.pkg**. This is the smaller download for existing users. It reuses installed models and libraries. The Update.zip contains the same signed PKG for in-app update downloads. Use the full PKG for first installation or if dependencies are missing.
 
-**0.52.20 is a small, Developer ID signed and Apple-notarized update-only release.** For a fresh installation, use a compatible full installer first, then apply this update. The older full 0.52.17 installer is signed but was not notarized.
+**0.52.21 is a small, Developer ID signed and Apple-notarized update-only release.** For a fresh installation, use a compatible full installer first, then apply this update. The older full 0.52.17 installer is signed but was not notarized.
 
 ## Source
 
