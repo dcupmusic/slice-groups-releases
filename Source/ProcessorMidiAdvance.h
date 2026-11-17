@@ -3,7 +3,7 @@ struct MidiAdvanceReady {
     SequenceClip clip, playback;
     juce::String sourcePath;
     uint64_t identity=0, revision=0, browser=0, config=0, generation=0;
-    bool consumed=false, playable=false;
+    bool consumed=false, playable=false,self=false;
 };
 std::unique_ptr<juce::ThreadPool> midiAdvancePool;
 std::atomic<bool> midiAdvanceCancelled{false};
@@ -58,17 +58,17 @@ void serviceMidiAdvance() {
     auto ready=std::make_shared<MidiAdvanceReady>();
     ready->sourcePath=sequence.path;ready->identity=sequenceIdentity510;ready->revision=sequence.revision;
     ready->browser=midiAdvanceBrowser;ready->config=configRevision;ready->generation=midiAdvanceGeneration;
-    auto order=midiAdvanceOrder;auto current=juce::File(sequence.path);
+    auto order=midiAdvanceOrder;auto current=juce::File(sequence.path);auto currentClip=sequence;
     const bool quantise=sequenceAutoQuantize,mono=extractionActive&&extractionOptions.monophonic;
     const double grid=sequenceSwingGrid;const bool lengthLocked=sequenceLengthLocked;const double lockedLength=sequenceLockedBeats;
     midiAdvanceBusy=true;
-    midiAdvancePool->addJob([this,ready,order,current,quantise,mono,grid,lengthLocked,lockedLength]{
+    midiAdvancePool->addJob([this,ready,order,current,currentClip,quantise,mono,grid,lengthLocked,lockedLength]{
         int row=order->indexOf(current);
-        for(int i=row+1;row>=0&&i<order->size()&&!midiAdvanceCancelled;++i){
+        for(int step=1;row>=0&&step<=order->size()&&!midiAdvanceCancelled;++step){int i=(row+step)%order->size();
             auto file=LibraryStore::resolveFile((*order)[i]);
             if(!SequenceClip::midi(file))continue;
             auto modified=file.getLastModificationTime();auto size=file.getSize();
-            if(!ready->clip.load(file))break;
+            ready->self=file==current;if(ready->self)ready->clip=currentClip;else if(!ready->clip.load(file))break;
             if(modified!=file.getLastModificationTime()||size!=file.getSize())break;
             ready->playback=ready->clip;
             if(quantise)for(auto& note:ready->playback.notes){
@@ -96,7 +96,7 @@ bool advanceMidiAt(double beat,int sample) {
     if(sequenceEditGesture||sequenceRecord||!midiAdvanceReady||!midiAdvanceMatches(*midiAdvanceReady))return false;
     releaseSequenceAt(sample);
     if(!midiAdvanceReady->playable){midiAdvancePaused=true;return true;}
-    auto& ready=*midiAdvanceReady;
+    auto& ready=*midiAdvanceReady;if(ready.self){ready.consumed=true;sequenceOrigin=beat;midiAdvanceEnd=beat+sequencePlayback.beats();return true;}
     const auto revision=sequence.revision+1;
     std::swap(sequence,ready.clip);
     std::swap(sequencePlayback,ready.playback);

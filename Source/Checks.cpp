@@ -1,3 +1,6 @@
+int runTrackMidi5229();
+int runFeatures5228();
+int runFeatures5222();
 int runFeatures5221();
 int runFeatures5220();
 int runFavouriteDisplay519Checks();
@@ -172,6 +175,7 @@ int runMidiContinueChecks();
 int runMultiWindowChecks();
 int runFeatures529();
 int main(int argc,char** argv) {
+    if(argc==2&&std::string(argv[1])=="--features5222-check")return runFeatures5222();
     if(argc==2&&std::string(argv[1])=="--features5221-check")return runFeatures5221();
     if(argc==2&&std::string(argv[1])=="--features5220-check")return runFeatures5220();
     if(argc==2&&std::string(argv[1])=="--favourite-display519-check")return runFavouriteDisplay519Checks();
@@ -191,6 +195,8 @@ int main(int argc,char** argv) {
     if(argc==2&&std::string(argv[1])=="--preset528-perf-check")return runPortable526Performance(true);
     if(argc==2&&std::string(argv[1])=="--portable526-perf-check")return runPortable526Performance();
     if(argc==2&&std::string(argv[1])=="--features526-check")return runFeatures526();
+    if(argc==2&&std::string(argv[1])=="--track-midi5229-check")return runTrackMidi5229();
+    if(argc==2&&std::string(argv[1])=="--features5228-check")return runFeatures5228();
     if(argc==2&&std::string(argv[1])=="--features525-check")return runFeatures525();
     if(argc==2&&std::string(argv[1])=="--features524-check")return runFeatures524();
     if(argc==2&&std::string(argv[1])=="--features517-check")return runFeatures517();

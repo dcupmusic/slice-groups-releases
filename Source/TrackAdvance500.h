@@ -12,7 +12,7 @@ struct AdvanceReady {
     uint64_t load = 0, browser = 0, config = 0;
     int masterKey = -1, numerator = 4, denominator = 4;
     double tempo = 0, rate = 0, origin = 0;
-    bool adopted = false, rendered = false, failed = false;
+    bool adopted = false, rendered = false, failed = false,self=false;juce::File targetFile;
     std::optional<std::pair<double, double>> trackRegion;
 };
 juce::ThreadPool advancePool{1, 0, juce::Thread::Priority::background};
@@ -189,6 +189,7 @@ bool handoffAdvance(juce::AudioBuffer<float>& out, int frame,
                     const juce::AudioPlayHead::PositionInfo& position, double beat, bool locked) {
     auto result = advanceBoundary(locked);
     if (result == AdvanceBoundary::pending) {advanceLate=true;return false;}
+    if(result==AdvanceBoundary::ready&&advanceReady->self&&!trackMode){advanceLate=false;advanceLoopOrigin=beat;advanceLoopArmed=false;trackCuePaused=false;trackReachedEnd=false;return false;}
     reachedAdvanceEnd(beat);
     if (result == AdvanceBoundary::stop) trackReachedEnd = false;
     if (result == AdvanceBoundary::ready) {
@@ -225,14 +226,14 @@ bool finishAdvanceBridge(AdvanceReady& ready) {
 void serviceTrackAdvance() {
     if (trackOffline || advanceCancelled || advancePreview) return;
     const juce::ScopedTryLock guard(lock);
-    if (!guard.isLocked() || advanceBusy) return;
+    if (!guard.isLocked() || advanceBusy) return;if(advanceReady&&advanceReady->adopted&&!advanceBridge.load())retireAdvanceReady();
     if (auto* bridge = advanceBridge.load()) {
         if (bridge->adopted || bridge->failed || bridge->load != loadGeneration) return;
         auto ready = advanceReady;
         advanceBusy = advanceInstalling = true;
         advancePool.addJob([this, ready] {
             const auto serial = ready->load;
-            const bool loaded = !advanceCancelled && installAudio(ready->audio, true, serial, false, true);
+            const bool loaded = !advanceCancelled && (ready->self?(loadGeneration==serial):installAudio(ready->audio, true, serial, false, true));
             const juce::ScopedLock guard(lock);
             advanceBusy = advanceInstalling = false;
             if (!loaded || loadGeneration != serial || audio != ready->audio) {
@@ -263,7 +264,7 @@ void serviceTrackAdvance() {
                 rebuildTimeline();
             }
             ready->adopted = true;
-            ++autoAdvanced;
+            if(!ready->self)++autoAdvanced;
         });
         return;
     }
@@ -292,8 +293,7 @@ void serviceTrackAdvance() {
         advancePreparedRate = outputRate;
         retireAdvanceReady();
     }
-    if (advanceBrowserPending || !playMode || !autoContinueEligible()
-        || !advanceTransportPlaying || isNonRealtime() || advanceReady) return;
+    if (advanceBrowserPending || !autoContinueEligible() || isNonRealtime() || advanceReady || stretchWorker.busy) return;
 
     auto order = advanceBrowserOrder;
     auto cancelled = [this, token, revision] {
@@ -317,8 +317,8 @@ void serviceTrackAdvance() {
         result->numerator = numerator;
         result->denominator = denominator;
         result->rate = rate;
-        int row = order ? order->indexOf(juce::File(source->path)) : -1;
-        for (int i = row + 1; row >= 0 && i < order->size() && !cancelled(); ++i) {
+        auto current=LibraryStore::resolveFile(juce::File(source->librarySourcePath517.isNotEmpty()?source->librarySourcePath517:source->path));int row=order?order->indexOf(current):-1;
+        for(int step=1;row>=0&&step<=order->size()&&!cancelled();++step){int i=(row+step)%order->size();
             auto file = LibraryStore::resolveFile((*order)[i]);
             if (file.hasFileExtension("sgpreset;sfz;sgmulti;mid;midi")
                 || !formats.findFormatForFileExtension(file.getFileExtension())) continue;
@@ -339,9 +339,9 @@ void serviceTrackAdvance() {
             preview->hasHost = true;
             preview->bpmRangeMin = low;
             preview->bpmRangeMax = high;
-            auto data = DecodedSampleCache::instance().get(file);
+            result->self=file==current;result->targetFile=file;auto data = result->self?source:DecodedSampleCache::instance().get(file);
             if (!data) data = preview->readAudio(file, cancelled);
-            if (!data || cancelled() || !preview->installAudio(data, true, 0, false)) break;
+            if (!data || cancelled() || (!result->self&&!preview->installAudio(data, true, 0, false))) break;
             if (preview->oneShotMode) continue;
             preview->isContentionEngine = preview->advancePreview = true;
             preview->autoContinue = preview->midiGateEnabled = false;
@@ -402,8 +402,8 @@ void serviceTrackAdvance() {
             result->renderer = std::move(preview);
             break;
         }
-        const juce::ScopedLock lockGuard(lock);
-        advanceBusy = false;
-        if (!cancelled()) advanceReady = std::move(result);
+        {const juce::ScopedLock lockGuard(lock);advanceBusy=false;if(!cancelled())advanceReady=result;}
+        if(result->renderer&&!result->self&&!cancelled()){int at=order->indexOf(result->targetFile);for(int step=1;at>=0&&step<order->size()&&!cancelled();++step){auto following=LibraryStore::resolveFile((*order)[(at+step)%order->size()]);if(following==current||following==result->targetFile||following.hasFileExtension("sfz;sgmulti;sgpreset;mid;midi")||following.isDirectory()||!formats.findFormatForFileExtension(following.getFileExtension()))continue;int type=LibraryStore::playbackType(following);if(type==1||type==6||type==7)continue;if(following.getSize()>16*1024*1024||DecodedSampleCache::instance().get(following))break;auto stillCurrent=[&]{if(cancelled())return true;const juce::ScopedTryLock guard(lock);return !guard.isLocked()||audio!=source||advanceBridge.load()!=nullptr;};if(!stillCurrent()){Processor decoder(false);decoder.trackOffline=true;auto stamp=following.getLastModificationTime();auto size=following.getSize();auto data=decoder.readAudio(following,stillCurrent);if(data&&!stillCurrent())DecodedSampleCache::instance().put(following,data,stamp,size);}break;}}
+
     });
 }

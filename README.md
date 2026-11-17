@@ -17,15 +17,24 @@ The Developer ID signed PKG installs the standalone app in `/Applications/Slice 
 
 If you also have a duplicate personal copy in `~/Library/Audio/Plug-Ins/VST3`, remove that duplicate before restarting your host. ZIP installers remain available on earlier releases. Windows and Intel Mac builds are not included.
 
-For an existing compatible installation, use **SliceGroups-0.52.19-AppleSilicon-Update.pkg**. This is the smaller download for existing users. It reuses installed models and libraries. The Update.zip contains the same signed PKG for in-app update downloads. Use the full PKG for first installation or if dependencies are missing.
+For an existing compatible installation, use **SliceGroups-0.52.29-AppleSilicon-Update.pkg**. This is the smaller download for existing users. It reuses installed models and libraries. The Update.zip contains the same signed PKG for in-app update downloads. Use the full PKG for first installation or if dependencies are missing.
 
-**0.52.21 is a small, Developer ID signed and Apple-notarized update-only release.** For a fresh installation, use a compatible full installer first, then apply this update. The older full 0.52.17 installer is signed but was not notarized.
+**0.52.29 is a small, Developer ID signed update-only release, not Apple-notarized.** For a fresh installation, use a compatible full installer first, then apply this update. The older full 0.52.17 installer is signed but was not notarized.
 
 ## Source
 
 The application source is readable in this repository. Use GitHub’s automatic source download for the current code. Download unchanged dependencies once from the permanent **0.40.2 Source.zip release asset**, which includes full dependency sources, headers, runtime libraries and model weights. MIDI extraction additionally needs the small ONNX dependency ZIP attached to v0.42.3. Similarity weights are published once as DrumSimilarity.pt on v0.43.2. See BUILD.md and THIRD_PARTY.md for exact build steps.
 
 Slice Groups source is licensed under **AGPLv3-or-later**. Dependencies retain their own licenses.
+
+## New in 0.52.29
+
+- MIDI Tools: one-click generation, weighted pitches, phrase transformation, A/B variation and Main/Fill controls.
+- Auto Continue wraps the browser list and prepares the next file earlier.
+- Extract MIDI directly from a Track loop’s audible stem mix.
+- Sequence playback and audition instruments work while the Track stays loaded.
+- Fixed Track/Sequencer view refreshes; MIDI Tools is hidden in Track view.
+- Focused playback, extraction, UI, browser and MIDI Tools checks passed. Not Apple-notarized.
 
 ## New in 0.52.19
 
