@@ -19,7 +19,7 @@ If you also have a duplicate personal copy in `~/Library/Audio/Plug-Ins/VST3`, r
 
 For an existing compatible installation, use **SliceGroups-0.52.30-AppleSilicon-Update.pkg**. This is the smaller download for existing users. It reuses installed models and libraries. The Update.zip contains the same signed PKG for in-app update downloads. Use the full PKG for first installation or if dependencies are missing.
 
-**0.52.30 is a small, Developer ID signed update-only release, not Apple-notarized.** For a fresh installation, use a compatible full installer first, then apply this update. The older full 0.52.17 installer is signed but was not notarized.
+**0.52.30 is a small, Developer ID signed and Apple-notarized update-only release.** For a fresh installation, use a compatible full installer first, then apply this update. The older full 0.52.17 installer is signed but was not notarized.
 
 ## Source
 
@@ -33,7 +33,7 @@ Slice Groups source is licensed under **AGPLv3-or-later**. Dependencies retain t
 - Uses the current stem mix and existing export destinations, filenames and timing.
 - Configure the API key in Settings; credentials stay in macOS Keychain.
 - Reuses cached results and resumes interrupted jobs. Local GPU/Safe CPU export remains available.
-- Mock API, caching, cancellation, export timing and Track/MIDI playback checks passed. A live paid API request has not been tested. Developer ID signed; not Apple-notarized.
+- Mock API, caching, cancellation, export timing and Track/MIDI playback checks passed. A live paid API request has not been tested. Developer ID signed and Apple-notarized.
 
 ## New in 0.52.19
 
