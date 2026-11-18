@@ -40,3 +40,13 @@ juce::int64 NativeTrash::dateAdded(const juce::File& file){
  std::lock_guard<std::mutex> lock(mutex);auto path=file.getFullPathName();auto found=cache.find(path);if(found!=cache.end())return found->second;
  juce::int64 value=0;@autoreleasepool{auto url=CFURLCreateFromFileSystemRepresentation(nullptr,(const UInt8*)path.toRawUTF8(),path.getNumBytesAsUTF8(),false);if(url){auto item=MDItemCreateWithURL(nullptr,url);if(item){auto date=MDItemCopyAttribute(item,CFSTR("kMDItemDateAdded"));if(date){if(CFGetTypeID(date)==CFDateGetTypeID())value=(juce::int64)((CFDateGetAbsoluteTime((CFDateRef)date)+kCFAbsoluteTimeIntervalSince1970)*1000.0);CFRelease(date);}CFRelease(item);}CFRelease(url);}}cache[path]=value;return value;
 }
+
+#import <Security/Security.h>
+#include "LalalCredentials.h"
+namespace LalalCredentials {
+static NSMutableDictionary* query(){return [NSMutableDictionary dictionaryWithDictionary:@{(__bridge id)kSecClass:(__bridge id)kSecClassGenericPassword,(__bridge id)kSecAttrService:@"audio.slicegroups.lalal-api",(__bridge id)kSecAttrAccount:@"api-key"}];}
+juce::String read(){@autoreleasepool{auto q=query();q[(__bridge id)kSecReturnData]=@YES;q[(__bridge id)kSecMatchLimit]=(__bridge id)kSecMatchLimitOne;CFTypeRef result=nullptr;OSStatus status=SecItemCopyMatching((__bridge CFDictionaryRef)q,&result);if(status!=errSecSuccess||!result)return {};NSData* data=(__bridge NSData*)result;auto value=juce::String::fromUTF8((const char*)data.bytes,(int)data.length);CFRelease(result);return value;}}
+static bool result(OSStatus status,juce::String& error){if(status==errSecSuccess)return true;CFStringRef message=SecCopyErrorMessageString(status,nullptr);error="Could not update LALAL.AI Keychain entry: "+(message?juce::String([(__bridge NSString*)message UTF8String]):juce::String((int)status));if(message)CFRelease(message);return false;}
+bool save(const juce::String& value,juce::String& error){@autoreleasepool{if(value.trim().isEmpty()||value.containsAnyOf("\r\n")){error="Enter a valid LALAL.AI API key.";return false;}auto key=value.trim();NSData* data=[NSData dataWithBytes:key.toRawUTF8() length:key.getNumBytesAsUTF8()];auto q=query();OSStatus status=SecItemUpdate((__bridge CFDictionaryRef)q,(__bridge CFDictionaryRef)@{(__bridge id)kSecValueData:data});if(status==errSecItemNotFound){q[(__bridge id)kSecValueData]=data;q[(__bridge id)kSecAttrAccessible]=(__bridge id)kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly;status=SecItemAdd((__bridge CFDictionaryRef)q,nullptr);}return result(status,error);}}
+bool remove(juce::String& error){@autoreleasepool{OSStatus status=SecItemDelete((__bridge CFDictionaryRef)query());return status==errSecItemNotFound||result(status,error);}}
+}

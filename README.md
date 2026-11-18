@@ -17,9 +17,9 @@ The Developer ID signed PKG installs the standalone app in `/Applications/Slice 
 
 If you also have a duplicate personal copy in `~/Library/Audio/Plug-Ins/VST3`, remove that duplicate before restarting your host. ZIP installers remain available on earlier releases. Windows and Intel Mac builds are not included.
 
-For an existing compatible installation, use **SliceGroups-0.52.29-AppleSilicon-Update.pkg**. This is the smaller download for existing users. It reuses installed models and libraries. The Update.zip contains the same signed PKG for in-app update downloads. Use the full PKG for first installation or if dependencies are missing.
+For an existing compatible installation, use **SliceGroups-0.52.30-AppleSilicon-Update.pkg**. This is the smaller download for existing users. It reuses installed models and libraries. The Update.zip contains the same signed PKG for in-app update downloads. Use the full PKG for first installation or if dependencies are missing.
 
-**0.52.29 is a small, Developer ID signed update-only release, not Apple-notarized.** For a fresh installation, use a compatible full installer first, then apply this update. The older full 0.52.17 installer is signed but was not notarized.
+**0.52.30 is a small, Developer ID signed update-only release, not Apple-notarized.** For a fresh installation, use a compatible full installer first, then apply this update. The older full 0.52.17 installer is signed but was not notarized.
 
 ## Source
 
@@ -27,14 +27,13 @@ The application source is readable in this repository. Use GitHub’s automatic 
 
 Slice Groups source is licensed under **AGPLv3-or-later**. Dependencies retain their own licenses.
 
-## New in 0.52.29
+## New in 0.52.30
 
-- MIDI Tools: one-click generation, weighted pitches, phrase transformation, A/B variation and Main/Fill controls.
-- Auto Continue wraps the browser list and prepares the next file earlier.
-- Extract MIDI directly from a Track loop’s audible stem mix.
-- Sequence playback and audition instruments work while the Track stays loaded.
-- Fixed Track/Sequencer view refreshes; MIDI Tools is hidden in Track view.
-- Focused playback, extraction, UI, browser and MIDI Tools checks passed. Not Apple-notarized.
+- Optional LALAL.AI cloud separation for HQ Export; live playback stays local.
+- Uses the current stem mix and existing export destinations, filenames and timing.
+- Configure the API key in Settings; credentials stay in macOS Keychain.
+- Reuses cached results and resumes interrupted jobs. Local GPU/Safe CPU export remains available.
+- Mock API, caching, cancellation, export timing and Track/MIDI playback checks passed. A live paid API request has not been tested. Developer ID signed; not Apple-notarized.
 
 ## New in 0.52.19
 
