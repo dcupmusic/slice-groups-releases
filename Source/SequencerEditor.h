@@ -1,5 +1,6 @@
 #include "MidiToolsPanel522.h"
 #pragma once
+#include "PermanentExports.h"
 #include "Controls.h"
 #include "MidiExtraction.h"
 #include "MusicalKeyPicker.h"

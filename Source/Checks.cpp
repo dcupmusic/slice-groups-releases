@@ -1,4 +1,5 @@
 int runFeatures5230();
+int runFeatures5231();
 int runTrackMidi5229();
 int runFeatures5228();
 int runFeatures5222();
@@ -196,6 +197,7 @@ int main(int argc,char** argv) {
     if(argc==2&&std::string(argv[1])=="--preset528-perf-check")return runPortable526Performance(true);
     if(argc==2&&std::string(argv[1])=="--portable526-perf-check")return runPortable526Performance();
     if(argc==2&&std::string(argv[1])=="--features526-check")return runFeatures526();
+    if(argc==2&&std::string(argv[1])=="--features5231-check")return runFeatures5231();
     if(argc==2&&std::string(argv[1])=="--features5230-check")return runFeatures5230();
     if(argc==2&&std::string(argv[1])=="--track-midi5229-check")return runTrackMidi5229();
     if(argc==2&&std::string(argv[1])=="--features5228-check")return runFeatures5228();

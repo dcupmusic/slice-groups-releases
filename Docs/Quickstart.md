@@ -39,3 +39,7 @@ Library sharing shares published metadata through the configured shared library.
 Settings → Phone Remote opens the local companion setup. Connect the phone to the same local network and open the pairing link shown there. Choose visible instances/groups; use Favourite and Previous/Next remotely. Keep the Mac awake and the audio host running. Do not share the private pairing link publicly.
 
 Settings → Keyboard Shortcuts configures actions. Settings → Hotkeys opens the gesture reference. A version label remains visible at the bottom-right. Use Check for Updates for available downloads; close Ableton and standalone before installing an update.
+
+## Dragged audio and MIDI
+
+Audio and MIDI dragged out of Slice Groups are saved permanently in `~/Music/Slice Groups/Exports/`. Keep these files while projects reference them. Use Ableton’s **Collect All and Save** to copy external files into a project before sharing or archiving it.
