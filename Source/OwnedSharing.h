@@ -120,8 +120,10 @@ class OwnedLibrarySharing final:private juce::Thread,public juce::DeletedAtShutd
  void run()override{while(!threadShouldExit()){try{scan();}catch(const Cancelled&){break;}catch(const std::exception& e){std::cerr<<"Sharing: "<<e.what()<<"\n";}if(!threadShouldExit())wake.wait(2000);}}
 public:
  explicit OwnedLibrarySharing(bool start=true):Thread("Slice Groups Dropbox sharing"){if(start)startThread(juce::Thread::Priority::background);}
- ~OwnedLibrarySharing()override{signalThreadShouldExit();wake.signal();stopThread(-1);}
- static OwnedLibrarySharing& instance(){static auto* service=new OwnedLibrarySharing();return *service;}
+ ~OwnedLibrarySharing()override{signalThreadShouldExit();wake.signal();stopThread(-1);auto* expected=this;liveInstance549.compare_exchange_strong(expected,nullptr);}
+ // JUCE may shut down and initialise again while Live keeps this module loaded.
+ inline static std::atomic<OwnedLibrarySharing*> liveInstance549{nullptr};
+ static OwnedLibrarySharing& instance(){static std::mutex creation;std::lock_guard<std::mutex> guard(creation);auto* service=liveInstance549.load();if(!service){service=new OwnedLibrarySharing();liveInstance549.store(service);}return *service;}
  bool editable(juce::File file)const{auto view=std::atomic_load(&published);for(auto& owner:view->owners)if(owner.second!=view->me&&inside(file.getFullPathName(),juce::File(owner.first)))return false;return true;}
  juce::String status(juce::File root)const{auto view=std::atomic_load(&published);auto owner=view->owners.find(root.getFullPathName());return owner==view->owners.end()?"Not shared":owner->second==view->me?"Shared: owner":"Shared: read-only";}
  juce::var snapshot(juce::String kind,bool remote=false)const{auto view=std::atomic_load(&published);if(!remote){bool readOnly=false;for(auto& owner:view->owners)readOnly|=owner.second!=view->me;if(!readOnly)return {};}auto& layers=remote?view->remote:view->merged;auto found=layers.find(kind);return found==layers.end()?juce::var():found->second;}

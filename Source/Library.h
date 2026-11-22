@@ -11,6 +11,7 @@
 
 // Personal state stays local. Shared sample metadata lives below each library root. Test suites
 // can redirect storage into work/ without modifying the user's real library.
+void queueTrackAnalysis547(const juce::Array<juce::File>& files);
 class LibraryStore {
 public:
     static constexpr bool usingDatabase=true;
@@ -114,6 +115,7 @@ public:
             for(auto key:removed)o.removeProperty(key);
             for(auto file:targets){file=resolveFile(file);if(type<0)o.removeProperty(file.getFullPathName());else o.setProperty(file.getFullPathName(),type);}
         });
+        if(type==2)queueTrackAnalysis547(targets);
     }
     static juce::String tagsFor(const juce::var& tags,const juce::File& file) {
         if (auto* object = tags.getDynamicObject()) return object->getProperty(file.getFullPathName()).toString();return {};
@@ -158,7 +160,14 @@ public:
     static int fileKey(const juce::File& input,juce::String hash={}){auto file=resolveFile(input);auto musical=musicalKeyOverride(file);if(musical.root!=-2)return musical.root;auto keys=read("keys.json");auto* object=keys.getDynamicObject();auto path=file.getFullPathName();if(object->hasProperty(path))return juce::jlimit(-1,11,(int)object->getProperty(path));if(hash.isNotEmpty()&&object->hasProperty("sha256:"+hash))return juce::jlimit(-1,11,(int)object->getProperty("sha256:"+hash));return -2;}
     static bool setFileKey(const juce::File& input,int key,juce::String hash={}){auto file=resolveFile(input);if(hash.isEmpty())hash=fingerprint(file);key=juce::jlimit(-1,11,key);return update("keys.json",[&](juce::DynamicObject& object){object.setProperty(file.getFullPathName(),key);if(hash.isNotEmpty())object.setProperty("sha256:"+hash,key);});}
     static juce::File loopConfigFile(juce::String identity){return root().getChildFile("loop-configs-v2").getChildFile(juce::SHA256(identity.toRawUTF8(),identity.getNumBytesAsUTF8()).toHexString()+".xml");}
-    static bool saveLoop(const juce::File& input,const juce::String& xml,juce::String hash={}){auto file=resolveFile(input);
+    inline static juce::CriticalSection retuneHashLock;inline static std::map<juce::String,juce::String> retuneHashes;
+    static void markRetuned(juce::File file,juce::String hash){const juce::ScopedLock guard(retuneHashLock);retuneHashes[file.getFullPathName()]=hash;}
+    static juce::var metadataAt(const juce::String& kind,const juce::File& file){auto source=resolveFile(file);if(kind=="loops.json"){auto xml=database()->loop(source.getFullPathName());return xml.isEmpty()?juce::var():juce::var(xml);}return database()->metadataEntry(kind,source.getFullPathName());}
+    static bool writeMetadataEntries(const std::vector<LocalDatabase::MetadataEntry>& entries,bool notify=true){try{for(auto& e:entries)if(juce::File::isAbsolutePath(e.identity)&&!editable(juce::File(e.identity))){storageError()="Shared library is read-only";return false;}bool ok=database()->writeMetadataEntries(entries);if(ok&&notify){pollDatabase();notifySharing();}return ok;}catch(const std::exception& e){storageError()=e.what();return false;}}
+    static std::vector<LocalDatabase::MetadataEntry> oneShotConfigEntries(juce::File file,juce::String hash,juce::String text,int key){file=resolveFile(file);{const juce::ScopedLock guard(retuneHashLock);auto found=retuneHashes.find(file.getFullPathName());if(found!=retuneHashes.end()&&hash.isNotEmpty()&&found->second!=hash){storageError()="Reload retuned sample before saving";return {};}}auto xml=juce::parseXML(text);if(!xml)return {};xml->removeAttribute("normalise");xml->removeAttribute("normaliseLufs");xml->removeAttribute("targetLufs");xml->setAttribute("contentHash",hash);auto path=file.getFullPathName();std::vector<LocalDatabase::MetadataEntry> entries{{"loops.json",path,xml->toString()},{"keys.json",path,key},{"musical-keys.json",path,MusicalKey{key,-1}.value()},{"parameter-edits.json",path,{}},{"playback-types.json",path,1}};if(hash.isNotEmpty()){entries.push_back({"loops.json","sha256:"+hash,xml->toString()});entries.push_back({"keys.json","sha256:"+hash,key});}return entries;}
+    static bool saveOneShotConfig(juce::File file,juce::String hash,juce::String text,int key,bool notify=true){auto entries=oneShotConfigEntries(file,hash,text,key);return !entries.empty()&&writeMetadataEntries(entries,notify);}
+    static bool saveLoop(const juce::File& input,const juce::String& xml,juce::String hash={}){auto file=resolveFile(input);{const juce::ScopedLock guard(retuneHashLock);auto found=retuneHashes.find(file.getFullPathName());if(found!=retuneHashes.end()&&hash.isNotEmpty()&&found->second!=hash){storageError()="Sample was retuned; reload before saving its old configuration";return false;}}
+
         if(!editable(file)){storageError()="Shared library is read-only";return false;}if(hash.isEmpty())hash=fingerprint(file);auto config=juce::parseXML(xml);if(!config)return false;config->removeAttribute("normalise");config->removeAttribute("normaliseLufs");config->removeAttribute("targetLufs");if(hash.isNotEmpty())config->setAttribute("contentHash",hash);auto value=config->toString();if(usingDatabase){try{bool ok=database()->saveLoop(file.getFullPathName(),hash,value);if(ok){if(!database()->metadataEntry("parameter-edits.json",file.getFullPathName()).isVoid())update("parameter-edits.json",[&](juce::DynamicObject& o){o.removeProperty(file.getFullPathName());});database()->poll(true);pollDatabase();notifySharing();}return ok;}catch(const std::exception& e){storageError()=e.what();return false;}}if(diagnosticOldSave)return update("loops.json",[&](juce::DynamicObject& o){o.setProperty(file.getFullPathName(),value);if(hash.isNotEmpty())o.setProperty("sha256:"+hash,value);});
         const juce::ScopedLock guard(updateLock());juce::InterProcessLock fileLock("SliceGroupsLoop-"+juce::String(file.getFullPathName().hashCode64()));if(!fileLock.enter(1000))return false;
         auto persist=[&](juce::String key){auto target=loopConfigFile(key);if(!target.getParentDirectory().createDirectory())return false;juce::TemporaryFile temporary(target);return temporary.getFile().replaceWithText(value)&&temporary.overwriteTargetFileWithTemporary();};

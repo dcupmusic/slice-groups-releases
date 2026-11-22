@@ -8,10 +8,12 @@ public:
 private:
  const bool finePreview;const juce::Thread::Priority priority;juce::CriticalSection mutex;juce::WaitableEvent wake;Request wanted;uint64_t serial=0;std::shared_ptr<const Result> ready;std::vector<std::shared_ptr<const Result>> cache;
 public:
- std::atomic<bool> busy{false};
+ std::atomic<bool> busy{false},paused{false};
+ void setPaused(bool on){const juce::ScopedLock g(mutex);if(paused.exchange(on)==on)return;++serial;busy=wanted.audio!=nullptr;wake.signal();}
  explicit StretchWorker(bool start=true,juce::Thread::Priority workerPriority=juce::Thread::Priority::normal,bool highQualityPreview=false):Thread("Slice Groups melodic stretch"),finePreview(highQualityPreview),priority(workerPriority){if(start)startThread(priority);}
  ~StretchWorker()override{signalThreadShouldExit();wake.signal();stopThread(-1);}
  void request(Request request){const juce::ScopedLock g(mutex);if(request==wanted)return;wanted=std::move(request);++serial;for(auto it=cache.begin();it!=cache.end();++it)if((*it)->request==wanted){ready=*it;auto hit=*it;cache.erase(it);cache.push_back(hit);busy=false;wake.signal();return;}busy=true;if(!isThreadRunning())startThread(priority);wake.signal();}
+ std::vector<std::shared_ptr<const Result>> cachedResults(){const juce::ScopedLock g(mutex);return cache;}
  std::shared_ptr<const Result> result(){const juce::ScopedTryLock g(mutex);return g.isLocked()?ready:nullptr;}
  static std::shared_ptr<Result> render(const Request& request,std::function<bool()> cancel={},bool preview=false){
   if(!request.audio||request.end<=request.begin)return {};int frames=request.end-request.begin,channels=juce::jmin(2,request.audio->buffer.getNumChannels());double ratio=request.tempo/request.host;
@@ -60,8 +62,8 @@ public:
  }
  void cachePrepared(std::shared_ptr<const Result> result){if(!result)return;const juce::ScopedLock g(mutex);for(auto& item:cache)if(item->request==result->request)return;cache.push_back(std::move(result));size_t bytes=0;for(auto& item:cache)bytes+=(size_t)item->buffer.getNumSamples()*item->buffer.getNumChannels()*sizeof(float);while(cache.size()>1&&(bytes>64*1024*1024||cache.size()>8)){bytes-=(size_t)cache.front()->buffer.getNumSamples()*cache.front()->buffer.getNumChannels()*sizeof(float);cache.erase(cache.begin());}}
  std::shared_ptr<const Result> cached(const Request& request){const juce::ScopedLock g(mutex);for(auto& item:cache)if(item->request==request)return item;return {};}
- void run()override{uint64_t done=0;while(!threadShouldExit()){wake.wait(100);Request request;uint64_t token;{const juce::ScopedLock g(mutex);if(serial==done)continue;request=wanted;token=serial;if(!busy){done=token;continue;}}
-  auto cancelled=[&]{const juce::ScopedLock g(mutex);return threadShouldExit()||serial!=token;};
+ void run()override{uint64_t done=0;while(!threadShouldExit()){wake.wait(100);if(paused.load())continue;Request request;uint64_t token;{const juce::ScopedLock g(mutex);if(serial==done)continue;request=wanted;token=serial;if(!busy){done=token;continue;}}
+  auto cancelled=[&]{const juce::ScopedLock g(mutex);return threadShouldExit()||paused.load()||serial!=token;};
   auto preview=render(request,cancelled,!finePreview);{const juce::ScopedLock g(mutex);if(token==serial&&preview)ready=preview;}
   auto rendered=cancelled()?nullptr:(finePreview||request.keyMap)?preview:render(request,cancelled);{const juce::ScopedLock g(mutex);done=token;if(token==serial){if(rendered){ready=rendered;cache.push_back(rendered);size_t bytes=0;for(auto& item:cache)bytes+=(size_t)item->buffer.getNumSamples()*item->buffer.getNumChannels()*sizeof(float);while(cache.size()>1&&(bytes>64*1024*1024||cache.size()>8)){bytes-=(size_t)cache.front()->buffer.getNumSamples()*cache.front()->buffer.getNumChannels()*sizeof(float);cache.erase(cache.begin());}}busy=false;}}}}
 };

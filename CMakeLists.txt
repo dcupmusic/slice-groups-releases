@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.22)
 set(CMAKE_OSX_DEPLOYMENT_TARGET "14.0" CACHE STRING "Minimum macOS version" FORCE)
-project(SliceGroups VERSION 0.52.31)
+project(SliceGroups VERSION 0.52.49)
 set(CMAKE_CXX_STANDARD 17)
 set(JUCE_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../../work/JUCE" CACHE PATH "JUCE checkout")
 add_subdirectory(${JUCE_ROOT} juce)
@@ -72,3 +72,6 @@ foreach(extract_target SliceGroups_VST3 SliceGroups_Standalone)
   COMMAND /usr/bin/codesign --force --sign - "$<TARGET_BUNDLE_DIR:${extract_target}>/Contents/Frameworks/libonnxruntime.1.dylib"
   COMMAND /usr/bin/codesign --force --sign - "$<TARGET_BUNDLE_DIR:${extract_target}>" VERBATIM)
 endforeach()
+
+set(RAPIDLY_DEMO_SDK "${CMAKE_CURRENT_SOURCE_DIR}/../../work/rapidly-evaluation/sdk" CACHE PATH "External local Rapidly evaluation SDK; not redistributed")
+target_compile_definitions(SliceGroups PRIVATE SLICE_GROUPS_RAPIDLY_SDK="${RAPIDLY_DEMO_SDK}")

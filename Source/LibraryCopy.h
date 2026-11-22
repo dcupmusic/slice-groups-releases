@@ -6,7 +6,9 @@ class LibraryCopy final:private juce::Thread,public juce::DeletedAtShutdown {
 public:
  struct State{bool busy=false;double progress=0;juce::String message;juce::Array<juce::File> copied;uint64_t serial=0;};
  using Layers=std::map<juce::String,juce::var>;
- static LibraryCopy& instance(){static auto* service=new LibraryCopy();return *service;}
+ // JUCE may shut down and initialise again while Live keeps this module loaded.
+ inline static std::atomic<LibraryCopy*> liveInstance549{nullptr};
+ static LibraryCopy& instance(){static std::mutex creation;std::lock_guard<std::mutex> guard(creation);auto* service=liveInstance549.load();if(!service){service=new LibraryCopy();liveInstance549.store(service);}return *service;}
  State state(){const juce::ScopedLock lock(mutex);return published;}
  bool request(juce::Array<juce::File> sources,juce::File destination){const juce::ScopedLock lock(mutex);if(published.busy)return false;inputs=sources;parent=destination;cancelled=false;published={true,0,"Preparing library copy...",{},published.serial+1};wake.signal();return true;}
  void cancel(){cancelled=true;}
@@ -54,7 +56,7 @@ public:
 private:
  juce::CriticalSection mutex;juce::WaitableEvent wake;juce::Array<juce::File> inputs;juce::File parent;State published;std::atomic<bool> cancelled{false};
  LibraryCopy():Thread("Slice Groups library copy"){startThread(juce::Thread::Priority::background);}
- ~LibraryCopy()override{signalThreadShouldExit();cancelled=true;wake.signal();stopThread(-1);}
+ ~LibraryCopy()override{signalThreadShouldExit();cancelled=true;wake.signal();stopThread(-1);auto* expected=this;liveInstance549.compare_exchange_strong(expected,nullptr);}
  void run()override{while(!threadShouldExit()){wake.wait(1000);juce::Array<juce::File> files;juce::File folder;{const juce::ScopedLock lock(mutex);if(!published.busy)continue;files=inputs;folder=parent;}
    juce::Array<juce::File> results;auto result=perform(files,folder,results,[this]{return cancelled.load()||threadShouldExit();},[this](double progress){const juce::ScopedLock lock(mutex);published.progress=progress;published.message="Copying to library: "+juce::String((int)(progress*100))+"%";++published.serial;});
    const juce::ScopedLock lock(mutex);published.busy=false;published.copied=results;published.message=result.wasOk()?"Copied to your library. Tags and saved settings are independently editable.":result.getErrorMessage();++published.serial;

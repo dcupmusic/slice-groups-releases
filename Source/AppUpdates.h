@@ -12,13 +12,15 @@ public:
   auto assetValues=json.getProperty("assets",{});if(auto* assets=assetValues.getArray())for(auto extension:{juce::String("-Update.zip"),juce::String(".pkg"),juce::String(".zip")}){auto expected="SliceGroups-"+out.version+"-AppleSilicon"+extension;for(auto& asset:*assets){auto url=asset.getProperty("browser_download_url",{}).toString();if(asset.getProperty("name",{}).toString()==expected&&asset.getProperty("state",{}).toString()=="uploaded"&&url=="https://github.com/dcupmusic/slice-groups-releases/releases/download/"+tag+"/"+expected){out.url=url;return out;}}}
   return out;
  }
- static AppUpdates& instance(){static auto* service=new AppUpdates();return *service;}
+ // JUCE may shut down and initialise again while Live keeps this module loaded.
+ inline static std::atomic<AppUpdates*> liveInstance549{nullptr};
+ static AppUpdates& instance(){static std::mutex creation;std::lock_guard<std::mutex> guard(creation);auto* service=liveInstance549.load();if(!service){service=new AppUpdates();liveInstance549.store(service);}return *service;}
  State state(){const juce::ScopedLock lock(mutex);return published;}
  void request(bool force=false){if(juce::SystemStats::getEnvironmentVariable("SLICE_GROUPS_DISABLE_UPDATES",{})=="1")return;const juce::ScopedLock lock(mutex);if(published.checking||(!force&&juce::Time::currentTimeMillis()-lastAttempt<6*60*60*1000LL))return;lastAttempt=juce::Time::currentTimeMillis();published.checking=true;published.message="Checking for updates...";++published.serial;pending=true;wake.signal();}
 private:
  juce::CriticalSection mutex;State published;juce::WaitableEvent wake;bool pending=false;juce::int64 lastAttempt=0;
  AppUpdates():Thread("Slice Groups update check"){startThread(juce::Thread::Priority::background);}
- ~AppUpdates()override{signalThreadShouldExit();wake.signal();stopThread(-1);}
+ ~AppUpdates()override{signalThreadShouldExit();wake.signal();stopThread(-1);auto* expected=this;liveInstance549.compare_exchange_strong(expected,nullptr);}
  void run()override{while(!threadShouldExit()){wake.wait(1000);{const juce::ScopedLock lock(mutex);if(!pending)continue;pending=false;}State next;next.message="Could not check for updates. Try again later.";
    try{int status=0;auto stream=juce::URL("https://api.github.com/repos/dcupmusic/slice-groups-releases/releases/latest").createInputStream(juce::URL::InputStreamOptions(juce::URL::ParameterHandling::inAddress).withConnectionTimeoutMs(8000).withNumRedirectsToFollow(2).withStatusCode(&status).withExtraHeaders("Accept: application/vnd.github+json\r\nUser-Agent: SliceGroups/" JucePlugin_VersionString "\r\n"));
     if(stream&&status==200){juce::MemoryBlock body;char block[8192];while(!threadShouldExit()&&!stream->isExhausted()&&body.getSize()<2*1024*1024){int n=stream->read(block,sizeof block);if(n<=0)break;body.append(block,(size_t)n);}if(!threadShouldExit()&&body.getSize()<2*1024*1024)next=parseRelease(juce::JSON::parse(juce::String::fromUTF8((const char*)body.getData(),(int)body.getSize())),JucePlugin_VersionString);}

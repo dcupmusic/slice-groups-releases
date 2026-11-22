@@ -4,6 +4,8 @@
 #import <Foundation/Foundation.h>
 #import <AppKit/AppKit.h>
 namespace NativeTrash {
+bool copyFiles(const juce::Array<juce::File>& files){@autoreleasepool{NSMutableArray<NSURL*>* urls=[NSMutableArray array];NSMutableArray<NSString*>* paths=[NSMutableArray array];for(auto file:files){NSString* path=[NSString stringWithUTF8String:file.getFullPathName().toRawUTF8()];[urls addObject:[NSURL fileURLWithPath:path]];[paths addObject:path];}if(!urls.count)return false;NSPasteboard* board=[NSPasteboard generalPasteboard];[board clearContents];bool ok=[board writeObjects:urls];[board addTypes:@[NSFilenamesPboardType] owner:nil];[board setPropertyList:paths forType:NSFilenamesPboardType];return ok;}}
+
 bool keyIsRepeat(){NSEvent* event=[NSApp currentEvent];return event&&event.type==NSEventTypeKeyDown&&event.isARepeat;}
 static NSURL* url(const juce::File& file){return [NSURL fileURLWithPath:[NSString stringWithUTF8String:file.getFullPathName().toRawUTF8()]];}
 bool move(const juce::File& original,juce::File& location,juce::String& message){@autoreleasepool {

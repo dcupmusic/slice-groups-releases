@@ -1044,3 +1044,30 @@ int runExtraction4100(){juce::ScopedJuceInitialiser_GUI gui;LibraryPreparation::
 #include "Features5230Checks.h"
 
 #include "Features5231Checks.h"
+
+#include "Features5232Checks.h"
+
+#include "Skip5233Checks.h"
+
+#include "Features5234Checks.h"
+
+#include "Whole5235Checks.h"
+
+#include "Streaming5236Checks.h"
+
+#include "Vintage5237Checks.h"
+
+#include "Preparation5238Checks.h"
+
+int runLayout5240(){juce::ScopedJuceInitialiser_GUI init;Processor p(false);p.autoSave=false;auto data=std::make_shared<AudioData>();data->rate=44100;data->buffer.setSize(2,44100);data->buffer.clear();p.audio=data;p.split(1,false);Editor editor(p);if(!editor.steadyWaveLayout5240ForCheck())return 2401;std::cout<<"Waveform and audition bounds stayed fixed through 1000 repeated layout refreshes in each One Shot/Melodic and compact/wide layout\n";return 0;}
+
+#include "Preparation5241Checks.h"
+
+#include "Move5242Checks.h"
+
+#include "Tal5243Checks.h"
+#include "TalBatch548Checks.h"
+#include "Lifecycle549Checks.h"
+#include "Features5247Checks.h"
+
+void queueTrackAnalysis547(const juce::Array<juce::File>& files){TrackPreanalysis::instance().request(files);}

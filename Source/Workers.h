@@ -73,7 +73,7 @@ public:
         struct Cached {juce::String key;uint64_t revision;std::shared_ptr<const PreparedView> view;};
         static std::mutex cacheMutex;
         static std::vector<Cached> cache;
-        const std::lock_guard<std::mutex> guard(cacheMutex);
+        std::unique_lock<std::mutex> guard(cacheMutex);
         if (cancelled()) return {};
         auto database = LibraryStore::database();
         const auto revision = database->catalogVersion();
@@ -83,6 +83,7 @@ public:
             ++preparedHits;
             return entry.view;
         }
+        guard.unlock();
         for (auto root : roots) if (!database->hasCatalog(root)) return {};
         auto view = std::make_shared<PreparedView>();
         auto add = [&](juce::File file, bool directory) {
@@ -104,6 +105,7 @@ public:
         }} sort;
         view->files.sort(sort);view->folders.sort(sort);view->direct.sort(sort);
         if (cancelled() || database->catalogVersion() != revision) return {};
+        guard.lock();
         cache.erase(std::remove_if(cache.begin(),cache.end(),[&](const auto& entry){return entry.key==key;}),cache.end());
         if (cache.size() >= 4) cache.erase(cache.begin());
         cache.push_back({key,revision,view});
@@ -116,7 +118,7 @@ public:
     uint64_t requestChanges(juce::File folder,juce::StringArray paths){const juce::ScopedLock g(mutex);root=folder;forceRefresh=false;for(auto path:paths)changedPaths.addIfNotAlreadyThere(path);auto token=++revision;wake.signal();return token;}
     static std::shared_ptr<LocalDatabase::CatalogDelta> changesFor(const juce::StringArray& paths){
       auto delta=std::make_shared<LocalDatabase::CatalogDelta>();auto db=LibraryStore::database();juce::AudioFormatManager formats;formats.registerBasicFormats();std::set<juce::String> added;
-      auto add=[&](juce::File file,bool folder){auto path=file.getFullPathName();if(added.insert(path).second)delta->added.push_back({path,file.getParentDirectory().getFullPathName(),file.getFileName(),folder});};
+      auto add=[&](juce::File file,bool folder){auto path=file.getFullPathName();if(added.insert(path).second){delta->added.push_back({path,file.getParentDirectory().getFullPathName(),file.getFileName(),folder});if(!folder&&LibraryStore::playbackType(file)==2)queueTrackAnalysis547({file});}};
       auto supported=[&](juce::File f){return f.hasFileExtension("sfz;sgmulti;mid;midi")||formats.findFormatForFileExtension(f.getFileExtension());};
       for(auto path:paths){juce::File item(path);if(!item.exists()){delta->removed.addIfNotAlreadyThere(path);continue;}if(item.isSymbolicLink()||item.getFileName().startsWithChar('.'))continue;
        if(!item.isDirectory()){if(supported(item)){delta->removed.addIfNotAlreadyThere(path);add(item,false);}continue;}

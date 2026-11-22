@@ -3,6 +3,7 @@
 namespace NativeTrash {
 juce::int64 dateAdded(const juce::File&);
 bool keyIsRepeat();
+bool copyFiles(const juce::Array<juce::File>& files);
 bool move(const juce::File& original,juce::File& location,juce::String& error);
 bool restore(const juce::File& location,const juce::File& original,juce::String& error);
 }

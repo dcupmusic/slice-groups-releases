@@ -40,7 +40,8 @@ struct Engine {
   if(gpu&&at::hasMPS())device=torch::Device(torch::kMPS);
   GPUJobLease gpuJob(device.is_mps(),background);model.eval();model.to(device);++instances;
  }
- void process(const float* input,float* output){
+ void process(const float* input,float* output,int frames=352800){
+  if(frames!=352800&&frames!=88200)throw std::runtime_error("Unsupported SCNet window length");
   pthread_set_qos_class_self_np(background?QOS_CLASS_BACKGROUND:QOS_CLASS_UTILITY,0);
   // Keep one inference in flight; rolling playback gets priority between HQ windows.
   bool liveGPU=!background&&device.is_mps();if(liveGPU)++liveWaiting;
@@ -61,6 +62,7 @@ extern "C" void* sg_scnet_create(const char* path,bool gpu,char* error,int count
 extern "C" void sg_scnet_destroy(void* instance){if(!instance)return;bool gpu=static_cast<Engine*>(instance)->device.is_mps();delete static_cast<Engine*>(instance);if(--instances==0&&gpu)at::detail::getMPSHooks().emptyCache();}
 extern "C" int sg_scnet_gpu(void* instance){return instance&&static_cast<Engine*>(instance)->device.is_mps();}
 extern "C" int sg_scnet_process(void* instance,const float* input,float* output,char* error,int count){try{if(!instance)throw std::runtime_error("SCNet is not loaded");static_cast<Engine*>(instance)->process(input,output);return 1;}catch(const std::exception& e){message(error,count,e.what());return 0;}}
+extern "C" int sg_scnet_process_frames(void* instance,const float* input,float* output,int frames,char* error,int count){try{if(!instance)throw std::runtime_error("SCNet is not loaded");static_cast<Engine*>(instance)->process(input,output,frames);return 1;}catch(const std::exception& e){message(error,count,e.what());return 0;}}
 namespace {
 struct SimilarityEngine {
  torch::jit::Module model;
