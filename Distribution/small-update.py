@@ -37,7 +37,7 @@ def build(bundles,output,version):
             if file.is_symlink():raise ValueError('Unexpected bundle symlink: '+str(file))
             if not file.is_file() or file.name=='.DS_Store' or file.name.startswith('._'):continue
             path=str(file.relative_to(bundle));data=file.read_bytes();entry={'path':path,'size':len(data),'sha256':sha(data),'mode':stat.S_IMODE(file.stat().st_mode)}
-            if len(data)>=8*1024*1024 and not path.startswith('Contents/MacOS/'):
+            if len(data)>=8*1024*1024 and not path.startswith(('Contents/MacOS/','Contents/Resources/BeatThis-')):
                 signature=macho_signature(data)
                 if signature and path.startswith('Contents/Frameworks/'):
                     end,sigsize=signature;assert end+sigsize<=len(data);prefix=min(1024*1024,end)

@@ -352,7 +352,7 @@ void serviceTrackAdvance() {
             if (preview->trackMode) {
                 auto grid = preview->trackGrid;
                 if (!preview->trackGridReady) {
-                    auto cache = LibraryStore::root().getChildFile("track-analysis-v3").getChildFile(data->contentHash + ".xml");
+                    auto cache = LibraryStore::root().getChildFile(beat_this550::cacheDirectory).getChildFile(data->contentHash + ".xml");
                     if (!TrackAnalyser::loadCache(cache, *data, low, high, grid))
                         grid = TrackAnalyser::analyse(*data, low, high, cancelled);
                     grid.autoChooseMode(data->rate);

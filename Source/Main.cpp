@@ -1068,6 +1068,8 @@ int runLayout5240(){juce::ScopedJuceInitialiser_GUI init;Processor p(false);p.au
 #include "Tal5243Checks.h"
 #include "TalBatch548Checks.h"
 #include "Lifecycle549Checks.h"
+#include "BeatThis550Checks.h"
+#include "TrackPreview551Checks.h"
 #include "Features5247Checks.h"
 
 void queueTrackAnalysis547(const juce::Array<juce::File>& files){TrackPreanalysis::instance().request(files);}

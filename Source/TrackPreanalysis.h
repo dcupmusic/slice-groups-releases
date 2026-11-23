@@ -55,7 +55,7 @@ public:
       auto size=file.getSize();auto modified=file.getLastModificationTime();auto prepared=LibraryStore::database()->metadataEntry("track-prepared-v1.json",file.getFullPathName());bool unchanged=(juce::int64)prepared.getProperty("size",-1)==size&&(juce::int64)prepared.getProperty("modified",-1)==modified.toMilliseconds()&&prepared.getProperty("hash",{}).toString().isNotEmpty();HashStream stream(file,cancel,[&](float v){progress(v*.1f,"Reading");});
       if(stream.stream.failedToOpen())error="Could not open the source file";
       else{
-       auto hash=unchanged?prepared.getProperty("hash",{}).toString():juce::SHA256(stream).toHexString();auto cache=LibraryStore::root().getChildFile("track-analysis-v3").getChildFile(hash+".xml");TrackGrid grid;
+       auto hash=unchanged?prepared.getProperty("hash",{}).toString():juce::SHA256(stream).toHexString();auto cache=LibraryStore::root().getChildFile(beat_this550::cacheDirectory).getChildFile(hash+".xml");TrackGrid grid;
        if(!cancel())ok=TrackAnalyser::loadCacheForFrames(cache,(int)reader->lengthInSamples,job.low,job.high,grid);
        if(!ok&&!cancel()){
         AudioData audio;audio.path=file.getFullPathName();audio.contentHash=hash;audio.rate=reader->sampleRate;audio.buffer.setSize(juce::jmin(2,(int)reader->numChannels),(int)reader->lengthInSamples);bool read=true;

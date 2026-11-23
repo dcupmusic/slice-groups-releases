@@ -1,3 +1,5 @@
+int runTrackPreview551();
+int runBeatThis550();
 int runLifecycle549();
 int runTalBatch548();
 int runFeatures5247();
@@ -212,6 +214,8 @@ int main(int argc,char** argv) {
     if(argc==2&&std::string(argv[1])=="--portable526-perf-check")return runPortable526Performance();
     if(argc==2&&std::string(argv[1])=="--features526-check")return runFeatures526();
     if(argc==2&&std::string(argv[1])=="--features5247-check")return runFeatures5247();
+    if(argc==2&&std::string(argv[1])=="--track-preview551-check")return runTrackPreview551();
+    if(argc==2&&std::string(argv[1])=="--beat550-check")return runBeatThis550();
     if(argc==2&&std::string(argv[1])=="--lifecycle549-check")return runLifecycle549();
     if(argc==2&&std::string(argv[1])=="--tal548-check")return runTalBatch548();
     if(argc==2&&std::string(argv[1])=="--tal5243-check")return runTal5243();
